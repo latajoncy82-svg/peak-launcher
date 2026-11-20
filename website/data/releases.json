@@ -1,0 +1,38 @@
+[
+  {
+    "tag": "v1.0.0",
+    "name": "Peak Launcher 1.0.0 — Pierwsze wydanie Szczytu Gór",
+    "publishedAt": "2026-11-20T20:00:00Z",
+    "body": "### Najważniejsze funkcje wydania 1.0.0\n- **Motyw Góry PEAK (Nocny Szczyt i Lodowcowy Dzień)**: spójny alpejski interfejs z panoramami szczytów i warstwami górskich grani.\n- **Wszystkie wersje Minecraft**: pełny katalog Mojang (`925+` wydań od Alphy i Bety po `26.3` oraz najnowsze snapshoty) wraz z izolowanymi profilami.\n- **Łatwe dodawanie modów**: wbudowany katalog Modrinth z automatycznym instalowaniem wymaganych zależności (`Fabric API`), **Pakiet Peak FPS Boost** jednym kliknięciem oraz wygodny **Drag & Drop** plików `.jar`.\n- **Automatyczna instalacja Javy (8 / 17 / 21 / 25) i Fabric Loadera**: launcher sam wykrywa brakujące środowisko i pobiera oficjalne pakiety Eclipse Temurin oraz Fabric.",
+    "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.0.0",
+    "prerelease": false,
+    "assets": {
+      "installer": {
+        "name": "Peak-Launcher-Setup-1.0.0.exe",
+        "size": 123336654,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.0.0/Peak-Launcher-Setup-1.0.0.exe",
+        "downloadCount": 0
+      },
+      "portable": {
+        "name": "Peak-Launcher-Portable-1.0.0.exe",
+        "size": 112018841,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.0.0/Peak-Launcher-Portable-1.0.0.exe",
+        "downloadCount": 0
+      },
+      "all": [
+        {
+          "name": "Peak-Launcher-Setup-1.0.0.exe",
+          "size": 123336654,
+          "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.0.0/Peak-Launcher-Setup-1.0.0.exe",
+          "downloadCount": 0
+        },
+        {
+          "name": "Peak-Launcher-Portable-1.0.0.exe",
+          "size": 112018841,
+          "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.0.0/Peak-Launcher-Portable-1.0.0.exe",
+          "downloadCount": 0
+        }
+      ]
+    }
+  }
+]
