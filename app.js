@@ -24,7 +24,8 @@
     previewImages: {
       dark: document.getElementById('preview-img-dark'),
       light: document.getElementById('preview-img-light'),
-      mods: document.getElementById('preview-img-mods')
+      mods: document.getElementById('preview-img-mods'),
+      java: document.getElementById('preview-img-java')
     },
 
     releasesList: document.getElementById('releases-list'),
@@ -105,6 +106,9 @@
     document.documentElement.dataset.theme = theme;
     el.sunIcon.classList.toggle('hidden', theme !== 'dark');
     el.moonIcon.classList.toggle('hidden', theme === 'dark');
+    if (window.PeakSiteFX) {
+      window.PeakSiteFX.setTheme(theme);
+    }
     try {
       localStorage.setItem('peak-launcher-site-theme', theme);
     } catch {
@@ -189,7 +193,7 @@
 
   function populateHeroDownload(latest) {
     if (!latest) return;
-    const tag = latest.tag || 'v1.0.0';
+    const tag = latest.tag || 'v1.1.0';
     const installer = latest.assets && latest.assets.installer;
     const portable = latest.assets && latest.assets.portable;
 
@@ -230,7 +234,7 @@
 
     releases.forEach((rel, index) => {
       const card = document.createElement('article');
-      card.className = 'release-card';
+      card.className = 'release-card spotlight-card';
 
       const header = document.createElement('div');
       header.className = 'release-header';
@@ -240,7 +244,7 @@
 
       const tagSpan = document.createElement('span');
       tagSpan.className = 'release-tag';
-      tagSpan.textContent = rel.tag || 'v1.0.0';
+      tagSpan.textContent = rel.tag || 'v1.1.0';
       titleGroup.appendChild(tagSpan);
 
       const nameSpan = document.createElement('span');
@@ -320,7 +324,6 @@
     let payload = null;
 
     if (!isLocalEnvironment()) {
-      // 1. Try Vercel serverless API endpoint first
       try {
         const apiRes = await fetch('/api/releases');
         if (apiRes.ok) {
@@ -333,10 +336,9 @@
           }
         }
       } catch {
-        // Ignore when hosted statically (e.g. GitHub Pages)
+        // Ignore when hosted statically
       }
 
-      // 2. Try GitHub public Releases API directly
       if (!payload) {
         try {
           const ghRes = await fetch(GITHUB_API_RELEASES, {
@@ -352,12 +354,11 @@
             }
           }
         } catch {
-          // Ignore network/rate-limit errors
+          // Ignore network errors
         }
       }
     }
 
-    // 3. Local environment or fallback static JSON
     if (!payload) {
       try {
         const localRes = await fetch('./data/releases.json');
@@ -415,6 +416,9 @@
       }
     } catch {
       // Ignore
+    }
+    if (window.PeakSiteFX) {
+      window.PeakSiteFX.init('website-fx-canvas');
     }
     bindEvents();
     loadReleases();
