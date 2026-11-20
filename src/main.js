@@ -365,6 +365,12 @@ async function runScreenshotCapture() {
   const modsShot = await mainWindow.webContents.capturePage();
   fs.writeFileSync(path.join(outDir, 'screen-mods.png'), modsShot.toPNG());
 
+  // 4. Dark Mode - Java & Fabric View
+  await mainWindow.webContents.executeJavaScript("window.__peakTestNavigate('java', 'alpine-dark')");
+  await wait(800);
+  const javaShot = await mainWindow.webContents.capturePage();
+  fs.writeFileSync(path.join(outDir, 'screen-java.png'), javaShot.toPNG());
+
   console.log('Captured screenshots to:', outDir);
   app.exit(0);
 }
@@ -372,10 +378,10 @@ async function runScreenshotCapture() {
 function createWindow() {
   const initialTheme = store ? store.getState().theme : 'alpine-dark';
   mainWindow = new BrowserWindow({
-    width: 1260,
-    height: 800,
-    minWidth: 1020,
-    minHeight: 680,
+    width: 1320,
+    height: 830,
+    minWidth: 1040,
+    minHeight: 700,
     frame: false,
     show: false,
     backgroundColor: initialTheme === 'alpine-light' ? '#EEF4FB' : '#070D17',

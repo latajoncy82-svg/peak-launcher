@@ -1,5 +1,6 @@
-### Najważniejsze funkcje wydania 1.0.0
-- **Motyw Góry PEAK (Nocny Szczyt i Lodowcowy Dzień)**: spójny alpejski interfejs z panoramami szczytów i warstwami górskich grani.
-- **Wszystkie wersje Minecraft**: pełny katalog Mojang (`925+` wydań od Alphy i Bety po `26.3` oraz najnowsze snapshoty) wraz z izolowanymi profilami.
-- **Łatwe dodawanie modów**: wbudowany katalog Modrinth z automatycznym instalowaniem wymaganych zależności (`Fabric API`), **Pakiet Peak FPS Boost** jednym kliknięciem oraz wygodny **Drag & Drop** plików `.jar`.
-- **Automatyczna instalacja Javy (8 / 17 / 21 / 25) i Fabric Loadera**: launcher sam wykrywa brakujące środowisko i pobiera oficjalne pakiety Eclipse Temurin oraz Fabric.
+### Najważniejsze nowości w wersji 1.1.0 — Alpine Aurora & Summit Glass GUI
+- **Żywa atmosfera Góry PEAK (`Alpine Aurora`)**: płynąca zorza polarna, gwiazdozbiór wysokogórski i opadający śnieg na animowanym płótnie z paralaksą kursora (automatycznie wstrzymywane w tle) oraz efekt szkła z podświetleniem kursora (`spotlight`) na kartach.
+- **Przebudowany kokpit Szczytu (`Graj`)**: mapa topograficzna konturów górskich i panoramiczne okno szczytu w hero decku, szybki pasek podglądu modów z przyciskiem **⚡ Boost FPS (1 klik)**, pływający dock startowy z 5-etapowym wskaźnikiem przygotowania gry oraz animowany przycisk **GRAJ**.
+- **Pływający panel boczny i telemetria**: boczna belka z awatarem głowy gracza (`minotar.net` z automatycznym fallbackiem), paskiem przydziału RAM i podsumowaniem wykrytych środowisk Java.
+- **Personalizowane karty ekspedycji**: 4 motywy kolorystyczne profili (*Szczyt*, *Lodowiec*, *Grań*, *Zorza*) wybierane w kreatorze oraz przycisk szybkiego uruchomienia `▶ Graj` bezpośrednio na karcie profilu.
+- **Dopracowane widoki Modów, Wersji, Javy i Konsoli**: rozszerzony baner **Pakietu Peak FPS Boost**, kolorowe odznaki kategorii modów i typów wersji oraz logi konsoli z kolorowymi znacznikami poziomów.
