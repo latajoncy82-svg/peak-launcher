@@ -116,6 +116,48 @@ contextBridge.exposeInMainWorld('peakAPI', {
   onLauncherLog: (cb) => subscribe('launcher:log', cb),
   onLauncherStatus: (cb) => subscribe('launcher:status', cb),
 
+  // Hosting .peak
+  hostingCreateServer: (payload) => invoke('hosting:create', payload),
+  hostingUpdateServer: (serverId, patch) => invoke('hosting:update', { serverId, patch }),
+  hostingSelectServer: (serverId) => invoke('hosting:select', serverId),
+  hostingDeleteServer: (serverId, deleteFiles = false) =>
+    invoke('hosting:delete', { serverId, deleteFiles }),
+  hostingStartServer: (serverId) => invoke('hosting:start', serverId),
+  hostingStopServer: (serverId) => invoke('hosting:stop', serverId),
+  hostingRestartServer: (serverId) => invoke('hosting:restart', serverId),
+  hostingSendCommand: (serverId, command) => invoke('hosting:command', { serverId, command }),
+  hostingGetStatus: (serverId) => invoke('hosting:status', serverId),
+  hostingGetLogs: (serverId) => invoke('hosting:logs', serverId),
+  hostingStartTunnel: (serverId) => invoke('hosting:startTunnel', serverId),
+  hostingStopTunnel: (serverId) => invoke('hosting:stopTunnel', serverId),
+  hostingOpenFolder: (serverId) => invoke('hosting:openFolder', serverId),
+  hostingOpenModsFolder: (serverId) => invoke('hosting:openModsFolder', serverId),
+  hostingListMods: (serverId) => invoke('hosting:listMods', serverId),
+  hostingToggleMod: (serverId, fileName, enabled) =>
+    invoke('hosting:toggleMod', { serverId, fileName, enabled }),
+  hostingDeleteMod: (serverId, fileName) => invoke('hosting:deleteMod', { serverId, fileName }),
+  hostingPickAndImportMods: (serverId) => invoke('hosting:pickAndImportMods', serverId),
+  hostingImportModPaths: (serverId, filePaths) =>
+    invoke('hosting:importModPaths', { serverId, filePaths }),
+  hostingSearchModrinth: (params) => invoke('hosting:searchModrinth', params),
+  hostingInstallModrinthMod: (params) => invoke('hosting:installModrinthMod', params),
+  hostingInstallServerPack: (serverId, packId) =>
+    invoke('hosting:installServerPack', { serverId, packId }),
+  hostingCopyFromProfile: (serverId, profileId) =>
+    invoke('hosting:copyFromProfile', { serverId, profileId }),
+  hostingSyncToProfile: (serverId, profileId) =>
+    invoke('hosting:syncToProfile', { serverId, profileId }),
+  hostingAddToServersDat: (serverId, profileId, customAddress) =>
+    invoke('hosting:addToServersDat', { serverId, profileId, customAddress }),
+  hostingJoinServer: (serverId, profileId) =>
+    invoke('hosting:joinServer', { serverId, profileId }),
+  hostingExportPeakFile: (serverId) => invoke('hosting:exportPeakFile', serverId),
+  hostingImportPeakFile: (payload) => invoke('hosting:importPeakFile', payload),
+  onHostingStatus: (cb) => subscribe('hosting:status', cb),
+  onHostingLog: (cb) => subscribe('hosting:log', cb),
+  onHostingProgress: (cb) => subscribe('hosting:progress', cb),
+  onHostingTunnel: (cb) => subscribe('hosting:tunnel', cb),
+
   // System utilities
   openExternal: (url) => invoke('app:openExternal', url),
   openPath: (targetPath) => invoke('app:openPath', targetPath),

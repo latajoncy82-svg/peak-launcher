@@ -7,7 +7,9 @@ const path = require('path');
 const VERIFY_DIR = path.resolve(__dirname, '..', '.verify-tmp');
 process.env.PEAK_VERIFY_DIR = VERIFY_DIR;
 
-const { Store, computeOfflineUuid } = require('../src/store');
+const { Store, computeOfflineUuid, sanitizePeakSlug } = require('../src/store');
+const { getProfileDirs, getServerDirs } = require('../src/engine/paths');
+const { readServersDat, upsertServerEntry } = require('../src/engine/nbtServers');
 const { getManifest, ensureVersionJson } = require('../src/engine/versions');
 const { detectInstalledJavas, getAdoptiumReleaseInfo } = require('../src/engine/javaManager');
 const {
@@ -20,6 +22,12 @@ const {
   getModrinthProjectDetails,
   installModrinthContent,
   installModrinthMod,
+  installModrinthModToDirectory,
+  listModsInDirectory,
+  toggleModInDirectory,
+  deleteModInDirectory,
+  copyProfileModsToServerDir,
+  syncServerModsToProfile,
   listProfileContent,
   listProfileMods,
   toggleContent,
@@ -28,6 +36,14 @@ const {
   deleteMod,
   checkAndUpdateProfileMods
 } = require('../src/engine/modsManager');
+const {
+  readServerProperties,
+  writeServerProperties,
+  writeEulaFile,
+  prepareServerRuntime,
+  buildPeakInvitePayload,
+  parsePeakInviteFile
+} = require('../src/engine/serverManager');
 const {
   validateMinecraftSkinPng,
   listSkinCatalog,
@@ -357,6 +373,124 @@ async function runVerification() {
     const cleared = clearAccountSkin({ dataDir, accountId: account.id });
     store.updateAccountSkin(account.id, cleared);
     assert.strictEqual(getAccountSkinInfo(dataDir, store.getActiveAccount()).hasCustomSkin, false);
+
+    console.log('8. Testowanie Hostingu .peak, NBT servers.dat, server.properties, Fabric Server JAR, modów serwerowych i zaproszeń .peak...');
+    assert.strictEqual(sanitizePeakSlug('Górski Świat .peak'), 'gorski-swiat');
+    const defaultServers = store.listServers();
+    assert(defaultServers.length >= 1 && defaultServers[0].peakDomain === 'szczyt.peak', 'Brak domyślnego serwera szczyt.peak');
+
+    const createdSrv = store.createServer({
+      name: 'Alpejski Test',
+      slug: 'szczyt',
+      mcVersion: '1.21.4',
+      loader: 'fabric',
+      port: 25565,
+      eulaAccepted: true
+    });
+    assert.strictEqual(createdSrv.slug, 'szczyt-2', `Oczekiwano unikalnego sluga szczyt-2, otrzymano ${createdSrv.slug}`);
+    assert.strictEqual(createdSrv.peakDomain, 'szczyt-2.peak');
+    assert.strictEqual(createdSrv.port, 25566, `Oczekiwano automatycznego wolnego portu 25566, otrzymano ${createdSrv.port}`);
+
+    const updatedSrv = store.updateServer(createdSrv.id, { slug: 'alpy-test', maxPlayers: 16 });
+    assert.strictEqual(updatedSrv.peakDomain, 'alpy-test.peak');
+    assert.strictEqual(updatedSrv.maxPlayers, 16);
+
+    const srvDirs = getServerDirs(dataDir, updatedSrv.id);
+    writeEulaFile(srvDirs.eulaPath, true);
+    assert(fs.readFileSync(srvDirs.eulaPath, 'utf8').includes('eula=true'));
+
+    writeServerProperties(srvDirs.propertiesPath, updatedSrv);
+    const propsRead = readServerProperties(srvDirs.propertiesPath);
+    assert.strictEqual(propsRead['server-port'], '25566');
+    assert.strictEqual(propsRead['max-players'], '16');
+    assert.strictEqual(propsRead['online-mode'], 'false');
+
+    const runtimeRes = await prepareServerRuntime({
+      server: updatedSrv,
+      settings,
+      dataDir
+    });
+    assert(fs.existsSync(runtimeRes.jarPath) && fs.statSync(runtimeRes.jarPath).size > 50000, 'Brak lub uszkodzony Fabric Server JAR');
+
+    const srvModSearch = await searchModrinth({ mcVersion: '1.21.4', limit: 6, serverCompatible: true });
+    assert(srvModSearch.hits.length >= 1, 'Pusty wynik Modrinth (serverCompatible)');
+    assert(srvModSearch.hits.every((h) => h.serverSide !== 'unsupported'), 'Modrinth serverCompatible zwrócił mod bez obsługi serwera');
+
+    await installModrinthModToDirectory({
+      projectId: 'gvQqBUqZ',
+      mcVersion: '1.21.4',
+      modsDir: srvDirs.modsDir,
+      metaPath: srvDirs.modsMetaPath
+    });
+    let srvMods = listModsInDirectory(srvDirs.modsDir, srvDirs.modsMetaPath);
+    assert(srvMods.some((m) => /lithium/i.test(m.name)), 'Lithium nie został zainstalowany na serwer');
+
+    srvMods = toggleModInDirectory(srvDirs.modsDir, srvDirs.modsMetaPath, srvMods[0].fileName, false);
+    assert(srvMods[0].enabled === false, 'Wyłączenie moda serwerowego nie powiodło się');
+    srvMods = toggleModInDirectory(srvDirs.modsDir, srvDirs.modsMetaPath, srvMods[0].fileName, true);
+    assert(srvMods[0].enabled === true, 'Ponowne włączenie moda serwerowego nie powiodło się');
+
+    const syncClientRes = syncServerModsToProfile({
+      dataDir,
+      serverModsDir: srvDirs.modsDir,
+      serverMetaPath: srvDirs.modsMetaPath,
+      profileId: 'peak-fabric-1214'
+    });
+    assert(syncClientRes.copied.length >= 1, 'Synchronizacja moda serwera na profil klienta nie powiodła się');
+
+    // Umieść atrapę modu wyłącznie klienckiego w profilu i sprawdź filtrację przy kopiowaniu na serwer
+    const profDirs = getProfileDirs(dataDir, 'peak-fabric-1214');
+    fs.writeFileSync(path.join(profDirs.modsDir, 'sodium-fabric-test.jar'), 'dummy', 'utf8');
+    const copySrvRes = copyProfileModsToServerDir({
+      dataDir,
+      profileId: 'peak-fabric-1214',
+      serverModsDir: srvDirs.modsDir,
+      serverMetaPath: srvDirs.modsMetaPath
+    });
+    assert(copySrvRes.skippedClientOnly.some((s) => /sodium/i.test(s)), 'Kopiowanie z profilu powinno pominąć kliencki mod Sodium');
+
+    const datPath = path.join(profDirs.instanceDir, 'servers.dat');
+    upsertServerEntry(datPath, { name: 'Szczyt A', ip: '127.0.0.1:25565', acceptTextures: 1 });
+    upsertServerEntry(datPath, { name: 'Alpy B', ip: '192.168.1.5:25566', acceptTextures: 0 });
+    upsertServerEntry(datPath, { name: 'Alpy B Nowy', ip: '192.168.1.5:25566', acceptTextures: 1 });
+    const datRead = readServersDat(datPath);
+    assert.strictEqual(datRead.entries.length, 2, 'Oczekiwano 2 wpisów w servers.dat po upsert');
+    assert.strictEqual(datRead.entries.find((e) => e.ip === '192.168.1.5:25566')?.name, 'Alpy B Nowy');
+
+    const invitePayload = buildPeakInvitePayload({ server: updatedSrv, dataDir });
+    const invitePath = path.join(VERIFY_DIR, 'test-invite.peak');
+    fs.writeFileSync(invitePath, JSON.stringify(invitePayload, null, 2), 'utf8');
+    const parsedInvite = parsePeakInviteFile(invitePath);
+    assert.strictEqual(parsedInvite.peakDomain, 'alpy-test.peak');
+    assert(parsedInvite.mods.some((m) => m.projectId === 'gvQqBUqZ'), 'Brak Lithium w wyeksportowanym zaproszeniu .peak');
+
+    const parent1214ForQp = await ensureVersionJson('1.21.4', dataDir);
+    const qpModern = buildLaunchSpec({
+      profile: { id: 'qp-1214', name: 'QP Modern', mcVersion: '1.21.4', loader: 'vanilla' },
+      account,
+      settings,
+      dataDir,
+      javaPath: dummyJava,
+      parentJson: parent1214ForQp,
+      quickPlayServer: '127.0.0.1:25566'
+    });
+    assert(qpModern.args.includes('--quickPlayMultiplayer') && qpModern.args.includes('127.0.0.1:25566'), 'Brak argumentu --quickPlayMultiplayer dla 1.21.4');
+
+    const parent1122ForQp = await ensureVersionJson('1.12.2', dataDir);
+    const qpLegacy = buildLaunchSpec({
+      profile: { id: 'qp-1122', name: 'QP Legacy', mcVersion: '1.12.2', loader: 'vanilla' },
+      account,
+      settings,
+      dataDir,
+      javaPath: dummyJava,
+      parentJson: parent1122ForQp,
+      quickPlayServer: '127.0.0.1:25566'
+    });
+    assert(qpLegacy.args.includes('--server') && qpLegacy.args.includes('--port') && qpLegacy.args.includes('25566'), 'Brak --server/--port dla MC 1.12.2');
+
+    deleteModInDirectory(srvDirs.modsDir, srvDirs.modsMetaPath, srvMods[0].fileName);
+    store.deleteServer(updatedSrv.id);
+    console.log('   -> Store .peak, server.properties, EULA, Fabric Server JAR, Modrinth (serwerowe), NBT servers.dat, .peak i QuickPlay OK.');
 
     console.log('\nWSZYSTKIE TESTY SILNIKA ZAKOŃCZONE SUKCESEM!');
   } finally {

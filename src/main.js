@@ -3,8 +3,9 @@ const path = require('path');
 const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 
 const { Store, getSystemMemoryInfo } = require('./store');
-const { ensureDataTree, ensureDir, getPaths, getProfileDirs } = require('./engine/paths');
+const { ensureDataTree, ensureDir, getPaths, getProfileDirs, getServerDirs } = require('./engine/paths');
 const { getManifest, ensureVersionJson, listInstalledVersions } = require('./engine/versions');
+const { upsertServerEntry } = require('./engine/nbtServers');
 const {
   MANAGED_MAJORS,
   detectInstalledJavas,
@@ -21,21 +22,46 @@ const {
 const {
   getContentDir,
   getProfileModsDir,
+  listModsInDirectory,
   listProfileContent,
   listProfileMods,
+  toggleModInDirectory,
   toggleContent,
   toggleMod,
+  deleteModInDirectory,
   deleteContent,
   deleteMod,
+  importLocalModsToDirectory,
   importLocalContent,
   importLocalMods,
   searchModrinth,
   getModrinthProjectDetails,
+  installModrinthModToDirectory,
   installModrinthContent,
+  installServerPackToDirectory,
   installCuratedPack,
   installPeakFpsPack,
+  copyProfileModsToServerDir,
+  syncServerModsToProfile,
   checkAndUpdateProfileMods
 } = require('./engine/modsManager');
+const {
+  getLocalLanIp,
+  writeServerProperties,
+  writeEulaFile,
+  startServer,
+  stopServer,
+  restartServer,
+  sendServerCommand,
+  getServerRuntimeStatus,
+  getAllServerStatuses,
+  getServerLogs,
+  startPublicTunnel,
+  stopPublicTunnel,
+  stopAllServers,
+  buildPeakInvitePayload,
+  parsePeakInviteFile
+} = require('./engine/serverManager');
 const {
   getLaunchStatus,
   launchProfile,
@@ -116,6 +142,8 @@ function buildStatePayload() {
     dataDir,
     systemMemory: getSystemMemoryInfo(),
     launchStatus: getLaunchStatus(),
+    serverStatuses: getAllServerStatuses(),
+    lanIp: getLocalLanIp(),
     installedVersions: Array.from(listInstalledVersions(dataDir)),
     installedFabric: listInstalledFabric(dataDir)
   };
@@ -537,6 +565,452 @@ function registerIpcHandlers() {
   handleIpc('launcher:stop', () => stopGame());
   handleIpc('launcher:status', () => getLaunchStatus());
 
+  // Hosting .peak (Self-hosted local Minecraft servers)
+  const resolveServerTarget = (serverId) => {
+    const srv = serverId ? store.getServer(serverId) : store.getActiveServer();
+    if (!srv) throw new Error('Nie znaleziono wybranego serwera .peak.');
+    return srv;
+  };
+
+  const syncServerConfigFiles = (server) => {
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    ensureDir(dirs.serverDir);
+    ensureDir(dirs.modsDir);
+    writeServerProperties(dirs.propertiesPath, server);
+    writeEulaFile(dirs.eulaPath, Boolean(server.eulaAccepted));
+    return dirs;
+  };
+
+  const findOrCreateMatchingClientProfile = ({ mcVersion, loader, fabricVersion, nameHint }) => {
+    const state = store.getState();
+    const existing = (state.profiles || []).find(
+      (p) => p.mcVersion === mcVersion && p.loader === loader
+    );
+    if (existing) {
+      store.selectProfile(existing.id);
+      return existing;
+    }
+    return store.createProfile({
+      name: nameHint || `${loader === 'fabric' ? 'Fabric' : 'Vanilla'} ${mcVersion}`,
+      mcVersion,
+      loader,
+      fabricVersion: fabricVersion || 'latest',
+      icon: 'summit'
+    });
+  };
+
+  handleIpc('hosting:create', (_e, payload) => {
+    const server = store.createServer(payload || {});
+    syncServerConfigFiles(server);
+    return { server, state: buildStatePayload() };
+  });
+
+  handleIpc('hosting:update', (_e, { serverId, patch } = {}) => {
+    const prev = resolveServerTarget(serverId);
+    const server = store.updateServer(prev.id, patch || {});
+    syncServerConfigFiles(server);
+    const runtimeStatus = getServerRuntimeStatus(server.id);
+    return {
+      server,
+      restartRequired: runtimeStatus.state !== 'offline',
+      state: buildStatePayload()
+    };
+  });
+
+  handleIpc('hosting:select', (_e, serverId) => {
+    const server = store.selectServer(serverId);
+    return { server, state: buildStatePayload() };
+  });
+
+  handleIpc('hosting:delete', async (_e, payload) => {
+    const serverId = typeof payload === 'string' ? payload : payload?.serverId;
+    const deleteFiles = Boolean(typeof payload === 'object' && payload?.deleteFiles);
+    const server = resolveServerTarget(serverId);
+    const rt = getServerRuntimeStatus(server.id);
+    if (rt.state !== 'offline') {
+      await stopServer(server.id, {
+        onStatus: (s) => sendToRenderer('hosting:status', s),
+        onLog: (entry) => sendToRenderer('hosting:log', entry)
+      });
+    }
+    const nextState = store.deleteServer(server.id);
+    if (deleteFiles) {
+      const dirs = getServerDirs(store.getDataDir(), server.id);
+      if (fs.existsSync(dirs.serverDir)) {
+        fs.rmSync(dirs.serverDir, { recursive: true, force: true });
+      }
+    }
+    return buildStatePayload();
+  });
+
+  handleIpc('hosting:start', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    const state = store.getState();
+    const dataDir = store.getDataDir();
+    store.updateServer(server.id, { lastStartedAt: new Date().toISOString() });
+    const status = await startServer({
+      server,
+      settings: state.settings,
+      dataDir,
+      onProgress: (p) => sendToRenderer('hosting:progress', p),
+      onLog: (entry) => sendToRenderer('hosting:log', entry),
+      onStatus: (s) => sendToRenderer('hosting:status', s)
+    });
+    return { status, state: buildStatePayload() };
+  });
+
+  handleIpc('hosting:stop', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    return stopServer(server.id, {
+      onStatus: (s) => sendToRenderer('hosting:status', s),
+      onLog: (entry) => sendToRenderer('hosting:log', entry)
+    });
+  });
+
+  handleIpc('hosting:restart', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    const state = store.getState();
+    const dataDir = store.getDataDir();
+    const status = await restartServer({
+      server,
+      settings: state.settings,
+      dataDir,
+      onProgress: (p) => sendToRenderer('hosting:progress', p),
+      onLog: (entry) => sendToRenderer('hosting:log', entry),
+      onStatus: (s) => sendToRenderer('hosting:status', s)
+    });
+    return { status, state: buildStatePayload() };
+  });
+
+  handleIpc('hosting:command', (_e, { serverId, command } = {}) => {
+    const server = resolveServerTarget(serverId);
+    return sendServerCommand(server.id, command, (entry) => sendToRenderer('hosting:log', entry));
+  });
+
+  handleIpc('hosting:status', (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    return getServerRuntimeStatus(server.id);
+  });
+
+  handleIpc('hosting:logs', (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    return getServerLogs(server.id);
+  });
+
+  handleIpc('hosting:startTunnel', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    return startPublicTunnel({
+      server,
+      onStatus: (s) => sendToRenderer('hosting:status', s),
+      onLog: (entry) => sendToRenderer('hosting:log', entry),
+      onTunnel: (t) => sendToRenderer('hosting:tunnel', t)
+    });
+  });
+
+  handleIpc('hosting:stopTunnel', (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    return stopPublicTunnel(server.id, {
+      onStatus: (s) => sendToRenderer('hosting:status', s),
+      onLog: (entry) => sendToRenderer('hosting:log', entry)
+    });
+  });
+
+  handleIpc('hosting:openFolder', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    ensureDir(dirs.serverDir);
+    await shell.openPath(dirs.serverDir);
+    return dirs.serverDir;
+  });
+
+  handleIpc('hosting:openModsFolder', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    ensureDir(dirs.modsDir);
+    await shell.openPath(dirs.modsDir);
+    return dirs.modsDir;
+  });
+
+  handleIpc('hosting:listMods', (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    return listModsInDirectory(dirs.modsDir, dirs.modsMetaPath);
+  });
+
+  handleIpc('hosting:toggleMod', (_e, { serverId, fileName, enabled } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    return toggleModInDirectory(dirs.modsDir, dirs.modsMetaPath, fileName, enabled);
+  });
+
+  handleIpc('hosting:deleteMod', (_e, { serverId, fileName } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    return deleteModInDirectory(dirs.modsDir, dirs.modsMetaPath, fileName);
+  });
+
+  handleIpc('hosting:pickAndImportMods', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Dodaj mody serwerowe (.jar)',
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Mody Minecraft (.jar)', extensions: ['jar'] }]
+    });
+    if (canceled || !filePaths || filePaths.length === 0) {
+      return { canceled: true, imported: [], mods: listModsInDirectory(dirs.modsDir, dirs.modsMetaPath) };
+    }
+    return {
+      canceled: false,
+      ...importLocalModsToDirectory(dirs.modsDir, dirs.modsMetaPath, filePaths)
+    };
+  });
+
+  handleIpc('hosting:importModPaths', (_e, { serverId, filePaths } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    return importLocalModsToDirectory(dirs.modsDir, dirs.modsMetaPath, filePaths);
+  });
+
+  handleIpc('hosting:searchModrinth', (_e, params) =>
+    searchModrinth({ ...(params || {}), projectType: 'mod', serverCompatible: true })
+  );
+
+  handleIpc('hosting:installModrinthMod', async (_e, params) => {
+    const { serverId, projectId, versionId = null, projectMeta = null } = params || {};
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    const res = await installModrinthModToDirectory({
+      projectId,
+      versionId,
+      mcVersion: server.mcVersion,
+      modsDir: dirs.modsDir,
+      metaPath: dirs.modsMetaPath,
+      projectMeta,
+      onProgress: (p) => sendToRenderer('hosting:progress', { ...p, serverId: server.id })
+    });
+    return {
+      ...res,
+      mods: listModsInDirectory(dirs.modsDir, dirs.modsMetaPath)
+    };
+  });
+
+  handleIpc('hosting:installServerPack', async (_e, { serverId, packId = 'server_perf' } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const dirs = getServerDirs(store.getDataDir(), server.id);
+    return installServerPackToDirectory({
+      packId,
+      mcVersion: server.mcVersion,
+      modsDir: dirs.modsDir,
+      metaPath: dirs.modsMetaPath,
+      onProgress: (p) => sendToRenderer('hosting:progress', { ...p, serverId: server.id })
+    });
+  });
+
+  handleIpc('hosting:copyFromProfile', (_e, { serverId, profileId } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const dataDir = store.getDataDir();
+    const dirs = getServerDirs(dataDir, server.id);
+    const profile = profileId ? store.getProfile(profileId) : store.getActiveProfile();
+    if (!profile) throw new Error('Nie znaleziono wybranego profilu.');
+    return copyProfileModsToServerDir({
+      dataDir,
+      profileId: profile.id,
+      serverModsDir: dirs.modsDir,
+      serverMetaPath: dirs.modsMetaPath
+    });
+  });
+
+  handleIpc('hosting:syncToProfile', (_e, { serverId, profileId } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const dataDir = store.getDataDir();
+    const dirs = getServerDirs(dataDir, server.id);
+    const profile = profileId ? store.getProfile(profileId) : store.getActiveProfile();
+    if (!profile) throw new Error('Nie znaleziono wybranego profilu.');
+    return syncServerModsToProfile({
+      dataDir,
+      serverModsDir: dirs.modsDir,
+      serverMetaPath: dirs.modsMetaPath,
+      profileId: profile.id
+    });
+  });
+
+  handleIpc('hosting:addToServersDat', (_e, { serverId, profileId, customAddress } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const dataDir = store.getDataDir();
+    const profile = profileId
+      ? store.getProfile(profileId)
+      : findOrCreateMatchingClientProfile({
+          mcVersion: server.mcVersion,
+          loader: server.loader,
+          fabricVersion: server.fabricVersion,
+          nameHint: `${server.name} (${server.peakDomain})`
+        });
+    if (!profile) throw new Error('Nie znaleziono profilu gry.');
+    const profileDirs = getProfileDirs(dataDir, profile.id);
+    const serversDatPath = path.join(profileDirs.instanceDir, 'servers.dat');
+    const ip = String(customAddress || `127.0.0.1:${server.port}`).trim();
+    const entries = upsertServerEntry(serversDatPath, {
+      name: `${server.name} (${server.peakDomain})`,
+      ip,
+      acceptTextures: 1
+    });
+    return { entries, serversDatPath, profileId: profile.id, state: buildStatePayload() };
+  });
+
+  handleIpc('hosting:joinServer', async (_e, { serverId, profileId } = {}) => {
+    const server = resolveServerTarget(serverId);
+    const state = store.getState();
+    const dataDir = store.getDataDir();
+    const profile = profileId
+      ? store.getProfile(profileId)
+      : findOrCreateMatchingClientProfile({
+          mcVersion: server.mcVersion,
+          loader: server.loader,
+          fabricVersion: server.fabricVersion,
+          nameHint: `${server.name} (${server.peakDomain})`
+        });
+    if (!profile) throw new Error('Nie znaleziono profilu gry.');
+
+    const dirs = getServerDirs(dataDir, server.id);
+    if (server.loader === 'fabric' && profile.loader === 'fabric') {
+      const serverMods = listModsInDirectory(dirs.modsDir, dirs.modsMetaPath);
+      if (serverMods.some((m) => m.enabled)) {
+        syncServerModsToProfile({
+          dataDir,
+          serverModsDir: dirs.modsDir,
+          serverMetaPath: dirs.modsMetaPath,
+          profileId: profile.id
+        });
+      }
+    }
+
+    const profileDirs = getProfileDirs(dataDir, profile.id);
+    const serversDatPath = path.join(profileDirs.instanceDir, 'servers.dat');
+    const targetAddr = `127.0.0.1:${server.port}`;
+    upsertServerEntry(serversDatPath, {
+      name: `${server.name} (${server.peakDomain})`,
+      ip: targetAddr,
+      acceptTextures: 1
+    });
+
+    store.selectProfile(profile.id);
+    store.updateProfile(profile.id, { lastPlayedAt: new Date().toISOString() });
+    const account = store.getActiveAccount();
+
+    const result = await launchProfile({
+      profile,
+      account,
+      allAccounts: state.accounts,
+      settings: state.settings,
+      dataDir,
+      quickPlayServer: targetAddr,
+      onProgress: (p) => sendToRenderer('launcher:progress', p),
+      onLog: (entry) => sendToRenderer('launcher:log', entry),
+      onStatus: (status) => {
+        sendToRenderer('launcher:status', status);
+        if (status.state === 'idle' && state.settings.closeOnLaunch && mainWindow && !mainWindow.isDestroyed()) {
+          if (mainWindow.isMinimized()) mainWindow.restore();
+          mainWindow.show();
+        }
+      }
+    });
+
+    if (state.settings.closeOnLaunch && mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.minimize();
+    }
+
+    return { ...result, profileId: profile.id, address: targetAddr, state: buildStatePayload() };
+  });
+
+  handleIpc('hosting:exportPeakFile', async (_e, serverId) => {
+    const server = resolveServerTarget(serverId);
+    const dataDir = store.getDataDir();
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: `Eksportuj zaproszenie ${server.peakDomain}`,
+      defaultPath: `${server.slug || 'server'}.peak`,
+      filters: [{ name: 'Peak Server Invite (.peak)', extensions: ['peak'] }]
+    });
+    if (canceled || !filePath) {
+      return { canceled: true };
+    }
+    const payload = buildPeakInvitePayload({ server, dataDir });
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf8');
+    return { canceled: false, filePath, payload };
+  });
+
+  handleIpc('hosting:importPeakFile', async (_e, payload = {}) => {
+    let chosenPath = payload?.filePath || '';
+    if (!chosenPath) {
+      const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+        title: 'Importuj serwer znajomego (.peak)',
+        properties: ['openFile'],
+        filters: [{ name: 'Peak Server Invite (.peak)', extensions: ['peak'] }]
+      });
+      if (canceled || !filePaths || !filePaths[0]) {
+        return { canceled: true };
+      }
+      chosenPath = filePaths[0];
+    }
+
+    const invite = parsePeakInviteFile(chosenPath);
+    const dataDir = store.getDataDir();
+    const profile = findOrCreateMatchingClientProfile({
+      mcVersion: invite.mcVersion,
+      loader: invite.loader,
+      fabricVersion: invite.fabricVersion,
+      nameHint: `${invite.serverName || invite.peakDomain} (${invite.mcVersion})`
+    });
+
+    const installedMods = [];
+    const skippedMods = [];
+    if (invite.loader === 'fabric' && Array.isArray(invite.mods)) {
+      for (const mod of invite.mods) {
+        if (!mod || !mod.projectId || mod.clientSide === 'unsupported') {
+          if (mod?.title || mod?.fileName) skippedMods.push(mod.title || mod.fileName);
+          continue;
+        }
+        try {
+          await installModrinthContent({
+            projectId: mod.projectId,
+            versionId: mod.versionId || null,
+            projectType: 'mod',
+            mcVersion: invite.mcVersion,
+            dataDir,
+            profileId: profile.id,
+            projectMeta: {
+              projectId: mod.projectId,
+              title: mod.title || mod.fileName || mod.projectId,
+              clientSide: mod.clientSide || '',
+              serverSide: mod.serverSide || ''
+            },
+            onProgress: (p) => sendToRenderer('hosting:progress', p)
+          });
+          installedMods.push(mod.title || mod.projectId);
+        } catch {
+          skippedMods.push(mod.title || mod.fileName || mod.projectId);
+        }
+      }
+    }
+
+    const profileDirs = getProfileDirs(dataDir, profile.id);
+    const serversDatPath = path.join(profileDirs.instanceDir, 'servers.dat');
+    upsertServerEntry(serversDatPath, {
+      name: `${invite.serverName || invite.peakDomain}`,
+      ip: invite.address,
+      acceptTextures: 1
+    });
+
+    return {
+      canceled: false,
+      invite,
+      profile,
+      installedMods,
+      skippedMods,
+      state: buildStatePayload()
+    };
+  });
+
   // Utilities
   handleIpc('app:openExternal', (_e, url) => {
     if (/^https?:\/\//i.test(String(url || ''))) {
@@ -611,6 +1085,12 @@ async function runScreenshotCapture() {
   const javaShot = await mainWindow.webContents.capturePage();
   fs.writeFileSync(path.join(outDir, 'screen-java.png'), javaShot.toPNG());
 
+  // 6. Dark Mode - Hosting .peak View
+  await mainWindow.webContents.executeJavaScript("window.__peakTestNavigate('hosting', 'alpine-dark')");
+  await wait(900);
+  const hostingShot = await mainWindow.webContents.capturePage();
+  fs.writeFileSync(path.join(outDir, 'screen-hosting.png'), hostingShot.toPNG());
+
   console.log('Captured screenshots to:', outDir);
   app.exit(0);
 }
@@ -681,6 +1161,21 @@ app.whenReady().then(() => {
       createWindow();
     }
   });
+});
+
+let quitCleanupDone = false;
+app.on('before-quit', (e) => {
+  if (quitCleanupDone) return;
+  const statuses = Object.values(getAllServerStatuses());
+  const anyRunning = statuses.some((s) => s.state !== 'offline' || s.tunnel?.active);
+  if (!anyRunning) return;
+  e.preventDefault();
+  stopAllServers()
+    .catch(() => {})
+    .finally(() => {
+      quitCleanupDone = true;
+      app.quit();
+    });
 });
 
 app.on('window-all-closed', () => {

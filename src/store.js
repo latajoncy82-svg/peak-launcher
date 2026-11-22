@@ -28,6 +28,23 @@ function getSystemMemoryInfo() {
 
 const SUPPORTED_LANGUAGES = ['pl', 'en', 'de', 'es', 'fr', 'uk'];
 
+function sanitizePeakSlug(input) {
+  const ascii = String(input || '')
+    .replace(/ł/g, 'l')
+    .replace(/Ł/g, 'l')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const slug = ascii
+    .replace(/\.peak$/i, '')
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 24)
+    .replace(/-+$/g, '');
+  return slug || 'szczyt';
+}
+
 function createDefaultConfig() {
   const { recommendedMb } = getSystemMemoryInfo();
   const defaultAccountId = 'acc-peak-player';
@@ -49,6 +66,33 @@ function createDefaultConfig() {
       }
     ],
     activeProfileId: 'peak-fabric-latest',
+    activeServerId: 'srv-szczyt',
+    servers: [
+      {
+        id: 'srv-szczyt',
+        name: 'Szczyt Survival',
+        slug: 'szczyt',
+        peakDomain: 'szczyt.peak',
+        mcVersion: '1.21.4',
+        loader: 'fabric',
+        fabricVersion: 'latest',
+        port: 25565,
+        ramMb: Math.max(1536, Math.min(4096, recommendedMb)),
+        maxPlayers: 10,
+        gamemode: 'survival',
+        difficulty: 'normal',
+        onlineMode: false,
+        pvp: true,
+        whitelist: false,
+        commandBlocks: false,
+        viewDistance: 10,
+        motd: '§b§lPEAK§r §7· §fszczyt.peak',
+        seed: '',
+        eulaAccepted: false,
+        createdAt: now,
+        lastStartedAt: null
+      }
+    ],
     profiles: [
       {
         id: 'peak-fabric-latest',
@@ -127,6 +171,13 @@ class Store {
         }
         if (!merged.profiles.some((p) => p.id === merged.activeProfileId)) {
           merged.activeProfileId = merged.profiles[0].id;
+        }
+        if (!Array.isArray(merged.servers) || merged.servers.length === 0) {
+          merged.servers = defaults.servers;
+          merged.activeServerId = defaults.activeServerId;
+        }
+        if (!merged.servers.some((s) => s.id === merged.activeServerId)) {
+          merged.activeServerId = merged.servers[0].id;
         }
         return merged;
       }
@@ -384,11 +435,204 @@ class Store {
     this.save();
     return this.getState();
   }
+
+  listServers() {
+    return this.data.servers || [];
+  }
+
+  getServer(serverId) {
+    return (this.data.servers || []).find((s) => s.id === serverId) || null;
+  }
+
+  getActiveServer() {
+    const list = this.data.servers || [];
+    return list.find((s) => s.id === this.data.activeServerId) || list[0] || null;
+  }
+
+  _resolveUniqueServerSlug(rawSlug, excludeId = null) {
+    const base = sanitizePeakSlug(rawSlug);
+    const taken = new Set(
+      (this.data.servers || [])
+        .filter((s) => s.id !== excludeId)
+        .map((s) => String(s.slug || '').toLowerCase())
+    );
+    if (!taken.has(base)) return base;
+    let counter = 2;
+    while (taken.has(`${base.slice(0, 20)}-${counter}`)) {
+      counter++;
+    }
+    return `${base.slice(0, 20)}-${counter}`;
+  }
+
+  _resolveAvailablePort(requestedPort, excludeId = null) {
+    const taken = new Set(
+      (this.data.servers || [])
+        .filter((s) => s.id !== excludeId)
+        .map((s) => Number(s.port))
+    );
+    let port = Math.max(1024, Math.min(65535, Number(requestedPort) || 25565));
+    while (taken.has(port) && port < 65535) {
+      port++;
+    }
+    if (taken.has(port)) {
+      port = 25565;
+      while (taken.has(port) && port < 65535) port++;
+    }
+    return port;
+  }
+
+  createServer(payload = {}) {
+    if (!Array.isArray(this.data.servers)) this.data.servers = [];
+    const { recommendedMb } = getSystemMemoryInfo();
+    const cleanName = String(payload.name || '').trim() || `Serwer ${payload.mcVersion || '1.21.4'}`;
+    const cleanMc = String(payload.mcVersion || '1.21.4').trim() || '1.21.4';
+    const loader = payload.loader === 'vanilla' ? 'vanilla' : 'fabric';
+    const slug = this._resolveUniqueServerSlug(payload.slug || cleanName);
+    const baseId = `srv-${slug}`;
+    let uniqueId = baseId;
+    let counter = 2;
+    while (this.data.servers.some((s) => s.id === uniqueId)) {
+      uniqueId = `${baseId}-${counter++}`;
+    }
+
+    const { maxSafeMb } = getSystemMemoryInfo();
+    const ramMb = Math.max(
+      1024,
+      Math.min(maxSafeMb, Number(payload.ramMb) || Math.max(1536, Math.min(4096, recommendedMb)))
+    );
+    const port = this._resolveAvailablePort(payload.port || 25565);
+    const peakDomain = `${slug}.peak`;
+
+    const server = {
+      id: uniqueId,
+      name: cleanName,
+      slug,
+      peakDomain,
+      mcVersion: cleanMc,
+      loader,
+      fabricVersion: loader === 'fabric' ? payload.fabricVersion || 'latest' : null,
+      port,
+      ramMb,
+      maxPlayers: Math.max(1, Math.min(100, Number(payload.maxPlayers) || 10)),
+      gamemode: ['survival', 'creative', 'adventure', 'spectator'].includes(payload.gamemode)
+        ? payload.gamemode
+        : 'survival',
+      difficulty: ['peaceful', 'easy', 'normal', 'hard'].includes(payload.difficulty)
+        ? payload.difficulty
+        : 'normal',
+      onlineMode: Boolean(payload.onlineMode),
+      pvp: payload.pvp !== undefined ? Boolean(payload.pvp) : true,
+      whitelist: Boolean(payload.whitelist),
+      commandBlocks: Boolean(payload.commandBlocks),
+      viewDistance: Math.max(4, Math.min(32, Number(payload.viewDistance) || 10)),
+      motd: String(payload.motd || `§b§lPEAK§r §7· §f${peakDomain}`).trim() || `§b§lPEAK§r §7· §f${peakDomain}`,
+      seed: String(payload.seed || '').trim(),
+      eulaAccepted: Boolean(payload.eulaAccepted),
+      createdAt: new Date().toISOString(),
+      lastStartedAt: null
+    };
+
+    this.data.servers.unshift(server);
+    this.data.activeServerId = server.id;
+    this.save();
+    return server;
+  }
+
+  updateServer(serverId, patch = {}) {
+    const server = this.getServer(serverId);
+    if (!server) {
+      throw new Error('Nie znaleziono wybranego serwera .peak.');
+    }
+
+    if (typeof patch.name === 'string' && patch.name.trim()) {
+      server.name = patch.name.trim();
+    }
+    if (patch.slug !== undefined) {
+      const oldDomain = server.peakDomain;
+      const nextSlug = this._resolveUniqueServerSlug(patch.slug, server.id);
+      server.slug = nextSlug;
+      server.peakDomain = `${nextSlug}.peak`;
+      if (patch.motd === undefined && server.motd && server.motd.includes(oldDomain)) {
+        server.motd = server.motd.replace(oldDomain, server.peakDomain);
+      }
+    }
+    if (typeof patch.mcVersion === 'string' && patch.mcVersion.trim()) {
+      server.mcVersion = patch.mcVersion.trim();
+    }
+    if (patch.loader === 'fabric' || patch.loader === 'vanilla') {
+      server.loader = patch.loader;
+      server.fabricVersion =
+        patch.loader === 'fabric' ? patch.fabricVersion || server.fabricVersion || 'latest' : null;
+    } else if (patch.fabricVersion !== undefined && server.loader === 'fabric') {
+      server.fabricVersion = patch.fabricVersion || 'latest';
+    }
+    if (patch.port !== undefined) {
+      const requested = Math.max(1024, Math.min(65535, Number(patch.port) || 25565));
+      const conflict = (this.data.servers || []).find(
+        (s) => s.id !== server.id && Number(s.port) === requested
+      );
+      if (conflict) {
+        throw new Error(`Port ${requested} jest już używany przez serwer "${conflict.name}".`);
+      }
+      server.port = requested;
+    }
+    if (patch.ramMb !== undefined) {
+      const { maxSafeMb } = getSystemMemoryInfo();
+      server.ramMb = Math.max(1024, Math.min(maxSafeMb, Number(patch.ramMb) || 2048));
+    }
+    if (patch.maxPlayers !== undefined) {
+      server.maxPlayers = Math.max(1, Math.min(100, Number(patch.maxPlayers) || 10));
+    }
+    if (['survival', 'creative', 'adventure', 'spectator'].includes(patch.gamemode)) {
+      server.gamemode = patch.gamemode;
+    }
+    if (['peaceful', 'easy', 'normal', 'hard'].includes(patch.difficulty)) {
+      server.difficulty = patch.difficulty;
+    }
+    if (patch.onlineMode !== undefined) server.onlineMode = Boolean(patch.onlineMode);
+    if (patch.pvp !== undefined) server.pvp = Boolean(patch.pvp);
+    if (patch.whitelist !== undefined) server.whitelist = Boolean(patch.whitelist);
+    if (patch.commandBlocks !== undefined) server.commandBlocks = Boolean(patch.commandBlocks);
+    if (patch.viewDistance !== undefined) {
+      server.viewDistance = Math.max(4, Math.min(32, Number(patch.viewDistance) || 10));
+    }
+    if (patch.motd !== undefined) {
+      server.motd = String(patch.motd || '').trim() || `§b§lPEAK§r §7· §f${server.peakDomain}`;
+    }
+    if (patch.seed !== undefined) server.seed = String(patch.seed || '').trim();
+    if (patch.eulaAccepted !== undefined) server.eulaAccepted = Boolean(patch.eulaAccepted);
+    if (patch.lastStartedAt !== undefined) server.lastStartedAt = patch.lastStartedAt;
+
+    this.save();
+    return server;
+  }
+
+  selectServer(serverId) {
+    if (!this.getServer(serverId)) {
+      throw new Error('Nie znaleziono wybranego serwera .peak.');
+    }
+    this.data.activeServerId = serverId;
+    this.save();
+    return this.getActiveServer();
+  }
+
+  deleteServer(serverId) {
+    if ((this.data.servers || []).length <= 1) {
+      throw new Error('Musi pozostać przynajmniej jeden serwer .peak.');
+    }
+    this.data.servers = this.data.servers.filter((s) => s.id !== serverId);
+    if (this.data.activeServerId === serverId) {
+      this.data.activeServerId = this.data.servers[0].id;
+    }
+    this.save();
+    return this.getState();
+  }
 }
 
 module.exports = {
   Store,
   SUPPORTED_LANGUAGES,
+  sanitizePeakSlug,
   computeOfflineUuid,
   getSystemMemoryInfo,
   createDefaultConfig

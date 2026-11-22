@@ -38,6 +38,21 @@
     skinTargetAccountId: null,
     skinViewer: null,
     skinStageOptions: { autoRotate: true, walk: true, showOuterLayer: true },
+    activeHostingSection: 'overview',
+    hostingModsSubView: 'browse',
+    hostingModrinthHits: [],
+    hostingModrinthTotalHits: 0,
+    hostingModrinthHasMore: false,
+    hostingModrinthLoading: false,
+    hostingModrinthQuery: '',
+    hostingModrinthCategory: 'all',
+    hostingModrinthSort: 'auto',
+    hostingModrinthOffset: 0,
+    hostingModsByServer: {},
+    hostingStatuses: {},
+    hostingLogsByServer: {},
+    hostingCmdHistory: [],
+    hostingCmdHistIdx: -1,
     logs: [],
     javaDownloadingMajor: null
   };
@@ -228,6 +243,8 @@
     } else if (viewName === 'skins') {
       loadSkinsCatalog();
       requestAnimationFrame(() => state.skinViewer?.resize());
+    } else if (viewName === 'hosting') {
+      loadHostingView();
     } else if (viewName === 'java') {
       renderJavaAndFabricView();
     } else if (viewName === 'versions') {
@@ -898,12 +915,12 @@
   function switchSettingSection(sectionName) {
     const name = sectionName || 'general';
     state.activeSettingSection = name;
-    document.querySelectorAll('.settings-nav-item').forEach((btn) => {
+    document.querySelectorAll('#view-console .settings-nav-item').forEach((btn) => {
       const isMatch = btn.dataset.settingSection === name;
       btn.classList.toggle('active', isMatch);
       btn.setAttribute('aria-selected', String(isMatch));
     });
-    document.querySelectorAll('.settings-pane').forEach((pane) => {
+    document.querySelectorAll('#view-console .settings-pane').forEach((pane) => {
       pane.classList.toggle('active', pane.id === `setting-pane-${name}`);
     });
     if (name === 'console') {
@@ -1016,7 +1033,7 @@
     const navAccCount = $('nav-accounts-count');
     if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
 
-    if ($('diag-version')) $('diag-version').textContent = 'v1.4.1';
+    if ($('diag-version')) $('diag-version').textContent = 'v1.5.0';
     if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
     if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
     if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
@@ -1612,6 +1629,506 @@
     } else if (state.activeView === 'java') {
       renderJavaAndFabricView();
     }
+    renderHostingNavDot();
+    if (state.activeView === 'hosting') {
+      renderHostingView();
+    }
+  }
+
+  /* ==================== HOSTING .PEAK ==================== */
+
+  function sanitizeSlugClient(val) {
+    return (
+      String(val || '')
+        .replace(/ł/g, 'l')
+        .replace(/Ł/g, 'l')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\.peak$/i, '')
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 24)
+        .replace(/-+$/g, '') || 'szczyt'
+    );
+  }
+
+  function getActiveServer() {
+    const servers = state.appState?.servers || [];
+    return servers.find((s) => s.id === state.appState?.activeServerId) || servers[0] || null;
+  }
+
+  function getServerStatusObj(serverId) {
+    return (
+      state.hostingStatuses[serverId] ||
+      state.appState?.serverStatuses?.[serverId] || {
+        serverId,
+        state: 'offline',
+        players: [],
+        playerCount: 0,
+        tunnel: { active: false, connecting: false, address: '', provider: '', note: '' }
+      }
+    );
+  }
+
+  function renderHostingNavDot() {
+    const liveDot = $('nav-hosting-live');
+    if (!liveDot) return;
+    const servers = state.appState?.servers || [];
+    const anyOnline = servers.some((s) => getServerStatusObj(s.id).state !== 'offline');
+    liveDot.classList.toggle('hidden', !anyOnline);
+  }
+
+  function switchHostingSection(sectionName) {
+    state.activeHostingSection = sectionName;
+    document.querySelectorAll('.hosting-nav-item').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.hostingSection === sectionName);
+    });
+    document.querySelectorAll('#view-hosting .hosting-content .settings-pane').forEach((pane) => {
+      pane.classList.toggle('active', pane.id === `hosting-pane-${sectionName}`);
+    });
+    if (sectionName === 'mods' && state.hostingModsSubView === 'browse' && state.hostingModrinthHits.length === 0) {
+      searchHostingModrinth({ append: false });
+    }
+  }
+
+  function appendHostingLog(entry) {
+    if (!entry || !entry.serverId) return;
+    const arr = state.hostingLogsByServer[entry.serverId] || [];
+    arr.push(entry);
+    if (arr.length > 500) arr.shift();
+    state.hostingLogsByServer[entry.serverId] = arr;
+
+    const activeSrv = getActiveServer();
+    if (activeSrv && activeSrv.id === entry.serverId) {
+      const out = $('hosting-console-output');
+      if (out) {
+        out.appendChild(createLogRow(entry));
+        out.scrollTop = out.scrollHeight;
+      }
+    }
+  }
+
+  function renderHostingConsole(serverId) {
+    const out = $('hosting-console-output');
+    if (!out) return;
+    const logs = state.hostingLogsByServer[serverId] || [];
+    const frag = document.createDocumentFragment();
+    if (logs.length === 0) {
+      const placeholder = document.createElement('div');
+      placeholder.className = 'log-line log-SYSTEM';
+      placeholder.textContent = '[PEAK] Gotowy. Kliknij „Uruchom serwer”, aby wystartować własny świat .peak.';
+      frag.appendChild(placeholder);
+    } else {
+      for (const entry of logs) {
+        frag.appendChild(createLogRow(entry));
+      }
+    }
+    out.replaceChildren(frag);
+    out.scrollTop = out.scrollHeight;
+  }
+
+  function renderHostingInstalledMods(server) {
+    const listEl = $('hosting-installed-mods-list');
+    const mods = state.hostingModsByServer[server.id] || [];
+    if ($('nav-hosting-mods-count')) $('nav-hosting-mods-count').textContent = String(mods.length);
+    if ($('hosting-installed-count')) $('hosting-installed-count').textContent = String(mods.length);
+    if (!listEl) return;
+
+    listEl.innerHTML = '';
+    if (mods.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">${t('hempty_server_mods')}</div>`;
+      return;
+    }
+
+    for (const mod of mods) {
+      const row = document.createElement('div');
+      row.className = `installed-mod-row ${mod.enabled ? '' : 'disabled'}`;
+      const sizeKb = Math.max(1, Math.round((mod.size || 0) / 1024));
+      const serverOnlyTag = mod.clientSide === 'unsupported';
+      row.innerHTML = `
+        <div class="installed-mod-main">
+          <div class="installed-mod-icon">
+            ${mod.iconUrl ? `<img src="${mod.iconUrl}" alt="" style="width:100%;height:100%;border-radius:8px;object-fit:cover" />` : (mod.name || 'M').slice(0, 1).toUpperCase()}
+          </div>
+          <div class="installed-mod-info">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <strong></strong>
+              ${mod.clientSide ? `<span class="compat-pill ${serverOnlyTag ? 'server-only' : ''}">${serverOnlyTag ? t('hcompat_server_only') : t('hcompat_both')}</span>` : ''}
+            </div>
+            <span>${mod.fileName} · ${mod.version ? `v${mod.version} · ` : ''}${sizeKb} KB</span>
+          </div>
+        </div>
+        <div class="installed-mod-actions">
+          <label class="switch">
+            <input type="checkbox" ${mod.enabled ? 'checked' : ''} />
+            <span class="slider"></span>
+          </label>
+          <button class="btn-danger-sm" type="button">${t('btn_remove')}</button>
+        </div>
+      `;
+      row.querySelector('.installed-mod-info strong').textContent = mod.name || mod.fileName;
+      row.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
+        try {
+          state.hostingModsByServer[server.id] = await api.hostingToggleMod(
+            server.id,
+            mod.fileName,
+            e.target.checked
+          );
+          renderHostingInstalledMods(server);
+          renderHostingModrinthGrid(server);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+      row.querySelector('.btn-danger-sm').addEventListener('click', async () => {
+        try {
+          state.hostingModsByServer[server.id] = await api.hostingDeleteMod(server.id, mod.fileName);
+          renderHostingInstalledMods(server);
+          renderHostingModrinthGrid(server);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+      listEl.appendChild(row);
+    }
+  }
+
+  function renderHostingModrinthGrid(server) {
+    const grid = $('hosting-modrinth-grid');
+    const moreWrap = $('hosting-modrinth-more-wrap');
+    const totalEl = $('hosting-modrinth-total');
+    if (!grid || !server) return;
+
+    if (totalEl) {
+      totalEl.textContent = state.hostingModrinthTotalHits
+        ? t('results_count', { count: state.hostingModrinthTotalHits.toLocaleString() })
+        : '';
+    }
+
+    if (state.hostingModrinthLoading && state.hostingModrinthOffset === 0) {
+      grid.innerHTML = `<div class="empty-state">${t('searching_modrinth')}</div>`;
+      moreWrap.classList.add('hidden');
+      return;
+    }
+
+    if (!state.hostingModrinthHits || state.hostingModrinthHits.length === 0) {
+      grid.innerHTML = `<div class="empty-state">${t('hempty_server_search', { mc: server.mcVersion })}</div>`;
+      moreWrap.classList.add('hidden');
+      return;
+    }
+
+    const installed = state.hostingModsByServer[server.id] || [];
+    const installedIds = new Set(installed.map((m) => m.projectId).filter(Boolean));
+    grid.innerHTML = '';
+
+    for (const hit of state.hostingModrinthHits) {
+      const isInstalled = installedIds.has(hit.projectId);
+      const isServerOnly = hit.clientSide === 'unsupported';
+      const card = document.createElement('div');
+      card.className = 'mod-card';
+      card.innerHTML = `
+        <div class="mod-card-head">
+          <img class="mod-icon" src="${hit.iconUrl || '../../assets/icon-64.png'}" alt="" loading="lazy" />
+          <div class="mod-title-wrap">
+            <strong></strong>
+            <span class="mod-author"></span>
+          </div>
+        </div>
+        <p class="mod-desc"></p>
+        <div class="mod-card-foot">
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <span class="compat-pill ${isServerOnly ? 'server-only' : ''}">${isServerOnly ? t('hcompat_server_only') : t('hcompat_both')}</span>
+            <span class="mod-downloads">${t('downloads_fmt', { val: formatCount(hit.downloads) })}</span>
+          </div>
+          <button class="${isInstalled ? 'btn-outline' : 'btn-accent'}" type="button" ${isInstalled ? 'disabled' : ''}>
+            ${isInstalled ? t('btn_added') : t('btn_add')}
+          </button>
+        </div>
+      `;
+      card.querySelector('.mod-title-wrap strong').textContent = hit.title;
+      card.querySelector('.mod-author').textContent = hit.author || '';
+      card.querySelector('.mod-desc').textContent = hit.description || '';
+
+      const addBtn = card.querySelector('button');
+      if (!isInstalled) {
+        addBtn.addEventListener('click', async () => {
+          addBtn.disabled = true;
+          addBtn.textContent = t('btn_downloading');
+          try {
+            if (server.loader !== 'fabric') {
+              const upd = await api.hostingUpdateServer(server.id, { loader: 'fabric', fabricVersion: 'latest' });
+              state.appState = upd.state;
+            }
+            const res = await api.hostingInstallModrinthMod({
+              serverId: server.id,
+              projectId: hit.projectId,
+              projectMeta: hit
+            });
+            state.hostingModsByServer[server.id] = res.mods;
+            showToast(t('toast_server_mod_added', { title: hit.title }), 'success');
+            renderHostingView();
+          } catch (err) {
+            addBtn.disabled = false;
+            addBtn.textContent = t('btn_add');
+            showToast(err.message, 'error');
+          }
+        });
+      }
+      grid.appendChild(card);
+    }
+
+    if (state.hostingModrinthHasMore) {
+      moreWrap.classList.remove('hidden');
+      const left = Math.max(0, state.hostingModrinthTotalHits - state.hostingModrinthHits.length);
+      $('btn-hosting-modrinth-more').textContent = t('btn_show_more', { left: left.toLocaleString() });
+    } else {
+      moreWrap.classList.add('hidden');
+    }
+  }
+
+  async function searchHostingModrinth({ append = false } = {}) {
+    const server = getActiveServer();
+    if (!server) return;
+    if (!append) state.hostingModrinthOffset = 0;
+    state.hostingModrinthLoading = true;
+    if (!append) renderHostingModrinthGrid(server);
+    try {
+      const res = await api.hostingSearchModrinth({
+        query: state.hostingModrinthQuery,
+        mcVersion: server.mcVersion,
+        category: state.hostingModrinthCategory,
+        sort: state.hostingModrinthSort,
+        offset: state.hostingModrinthOffset,
+        limit: 24
+      });
+      state.hostingModrinthTotalHits = res.totalHits || 0;
+      state.hostingModrinthHasMore = Boolean(res.hasMore);
+      state.hostingModrinthHits = append ? [...state.hostingModrinthHits, ...res.hits] : res.hits;
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      state.hostingModrinthLoading = false;
+      renderHostingModrinthGrid(server);
+    }
+  }
+
+  function renderHostingView() {
+    if (!state.appState) return;
+    renderHostingNavDot();
+    const servers = state.appState.servers || [];
+    const activeSrv = getActiveServer();
+    if (!activeSrv) return;
+
+    const listEl = $('hosting-servers-list');
+    if (listEl) {
+      listEl.innerHTML = '';
+      for (const srv of servers) {
+        const st = getServerStatusObj(srv.id);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `hosting-server-item ${srv.id === activeSrv.id ? 'active' : ''}`;
+        const dotClass =
+          st.state === 'online'
+            ? 'online'
+            : st.state === 'starting' || st.state === 'preparing'
+              ? 'starting'
+              : '';
+        btn.innerHTML = `
+          <span class="hosting-server-dot ${dotClass}"></span>
+          <div class="hosting-server-item-meta">
+            <strong></strong>
+            <span class="hosting-server-domain"></span>
+            <span class="hosting-server-sub"></span>
+          </div>
+        `;
+        btn.querySelector('strong').textContent = srv.name;
+        btn.querySelector('.hosting-server-domain').textContent = srv.peakDomain;
+        btn.querySelector('.hosting-server-sub').textContent = `${srv.loader === 'fabric' ? 'Fabric' : 'Vanilla'} · ${srv.mcVersion} · :${srv.port}`;
+        btn.addEventListener('click', async () => {
+          if (srv.id === activeSrv.id) return;
+          const res = await api.hostingSelectServer(srv.id);
+          state.appState = res.state;
+          await loadHostingView();
+        });
+        listEl.appendChild(btn);
+      }
+    }
+
+    const rt = getServerStatusObj(activeSrv.id);
+    const isOffline = rt.state === 'offline';
+    const isRunning = !isOffline;
+
+    const dotEl = $('nav-hosting-status-dot');
+    const cdotEl = $('hosting-console-dot');
+    for (const d of [dotEl, cdotEl]) {
+      if (!d) continue;
+      d.classList.toggle('running', rt.state === 'online');
+      d.classList.toggle('preparing', rt.state === 'preparing' || rt.state === 'starting' || rt.state === 'stopping');
+    }
+
+    $('hosting-srv-name').textContent = activeSrv.name;
+    $('hosting-srv-domain').textContent = activeSrv.peakDomain;
+    $('hosting-srv-engine').textContent = `${activeSrv.loader === 'fabric' ? 'Fabric' : 'Vanilla'} · ${activeSrv.mcVersion}`;
+    $('hosting-srv-port-pill').textContent = `:${activeSrv.port}`;
+    $('hosting-srv-ram-pill').textContent = `${(Number(activeSrv.ramMb || 2048) / 1024).toFixed(1)} GB RAM`;
+
+    const statusBadge = $('hosting-status-badge');
+    statusBadge.className = `hosting-status-pill ${rt.state}`;
+    statusBadge.textContent = t(`hstatus_${rt.state}`) || rt.state;
+    $('hosting-players-badge').textContent = t('hplayers_fmt', {
+      count: rt.playerCount || 0,
+      max: activeSrv.maxPlayers || 10
+    });
+
+    $('btn-hosting-start').classList.toggle('hidden', isRunning);
+    $('btn-hosting-stop').classList.toggle('hidden', isOffline);
+    $('btn-hosting-restart').classList.toggle('hidden', isOffline);
+    $('hosting-cmd-input').disabled = isOffline;
+    $('btn-hosting-send-cmd').disabled = isOffline;
+
+    const lanIp = state.appState.lanIp || '127.0.0.1';
+    $('hosting-addr-peak').textContent = activeSrv.peakDomain;
+    $('hosting-addr-loopback').textContent = `127.0.0.1:${activeSrv.port}`;
+    $('hosting-addr-lan').textContent = `${lanIp}:${activeSrv.port}`;
+
+    const tun = rt.tunnel || {};
+    if (tun.active && tun.address) {
+      $('hosting-addr-tunnel').textContent = tun.address;
+      $('hosting-addr-tunnel-sub').textContent = tun.provider || 'Pinggy TCP';
+      $('btn-hosting-toggle-tunnel-quick').textContent = t('btn_disable_tunnel');
+      $('btn-copy-addr-tunnel').classList.remove('hidden');
+      $('hshare-tunnel-address').textContent = tun.address;
+      $('btn-hosting-tunnel-toggle').textContent = t('btn_disable_tunnel');
+    } else if (tun.connecting) {
+      $('hosting-addr-tunnel').textContent = t('tunnel_connecting');
+      $('btn-hosting-toggle-tunnel-quick').textContent = t('tunnel_connecting');
+      $('btn-copy-addr-tunnel').classList.add('hidden');
+      $('hshare-tunnel-address').textContent = t('tunnel_connecting');
+      $('btn-hosting-tunnel-toggle').textContent = t('tunnel_connecting');
+    } else {
+      $('hosting-addr-tunnel').textContent = t('tunnel_off');
+      $('hosting-addr-tunnel-sub').textContent = t('addr_tunnel_sub');
+      $('btn-hosting-toggle-tunnel-quick').textContent = t('btn_enable_tunnel');
+      $('btn-copy-addr-tunnel').classList.add('hidden');
+      $('hshare-tunnel-address').textContent = t('tunnel_off');
+      $('btn-hosting-tunnel-toggle').textContent = t('btn_enable_tunnel');
+    }
+
+    renderHostingConsole(activeSrv.id);
+
+    $('hosting-vanilla-callout').classList.toggle('hidden', activeSrv.loader === 'fabric');
+    $('hosting-mods-restart-banner').classList.toggle('hidden', isOffline);
+
+    for (const selId of ['hosting-sync-profile-select', 'hosting-dat-profile-select']) {
+      const sel = $(selId);
+      if (!sel) continue;
+      sel.innerHTML = '';
+      for (const p of state.appState.profiles || []) {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = `${p.name} (${p.mcVersion})`;
+        if (p.mcVersion === activeSrv.mcVersion && p.loader === activeSrv.loader) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+
+    renderHostingInstalledMods(activeSrv);
+    renderHostingModrinthGrid(activeSrv);
+
+    $('hset-name').value = activeSrv.name || '';
+    $('hset-slug').value = activeSrv.slug || '';
+    $('hset-loader').value = activeSrv.loader || 'fabric';
+    const mcSel = $('hset-mc-version');
+    if (mcSel) {
+      const list = state.manifest?.versions?.filter((v) => v.type === 'release').map((v) => v.id) || ['26.3', '1.21.4', '1.20.4', '1.19.4', '1.16.5', '1.12.2'];
+      if (!list.includes(activeSrv.mcVersion)) list.unshift(activeSrv.mcVersion);
+      mcSel.innerHTML = '';
+      for (const v of list.slice(0, 80)) {
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = v;
+        if (v === activeSrv.mcVersion) opt.selected = true;
+        mcSel.appendChild(opt);
+      }
+    }
+    $('hset-port').value = String(activeSrv.port || 25565);
+    $('hset-maxplayers').value = String(activeSrv.maxPlayers || 10);
+    const maxSafe = state.appState.systemMemory?.maxSafeMb || 16384;
+    $('hset-ram-slider').max = String(Math.max(2048, maxSafe));
+    $('hset-ram-slider').value = String(activeSrv.ramMb || 2048);
+    $('hset-ram-val').textContent = `${activeSrv.ramMb || 2048} MB · ${((activeSrv.ramMb || 2048) / 1024).toFixed(1)} GB`;
+    $('hset-gamemode').value = activeSrv.gamemode || 'survival';
+    $('hset-difficulty').value = activeSrv.difficulty || 'normal';
+    $('hset-viewdist').value = String(activeSrv.viewDistance || 10);
+    $('hset-seed').value = activeSrv.seed || '';
+    $('hset-motd').value = activeSrv.motd || '';
+    $('hset-nonpremium').checked = !activeSrv.onlineMode;
+    $('hset-pvp').checked = activeSrv.pvp !== false;
+    $('hset-whitelist').checked = Boolean(activeSrv.whitelist);
+    $('hset-cmdblocks').checked = Boolean(activeSrv.commandBlocks);
+    $('hset-eula').checked = Boolean(activeSrv.eulaAccepted);
+    $('btn-hosting-delete-server').disabled = servers.length <= 1;
+    switchHostingSection(state.activeHostingSection || 'overview');
+  }
+
+  async function loadHostingView() {
+    const activeSrv = getActiveServer();
+    if (!activeSrv) return;
+    try {
+      const [mods, status, logs] = await Promise.all([
+        api.hostingListMods(activeSrv.id),
+        api.hostingGetStatus(activeSrv.id),
+        api.hostingGetLogs(activeSrv.id)
+      ]);
+      state.hostingModsByServer[activeSrv.id] = mods;
+      state.hostingStatuses[activeSrv.id] = status;
+      state.hostingLogsByServer[activeSrv.id] = logs;
+    } catch {
+      // Render available cached state
+    }
+    renderHostingView();
+    if (state.activeHostingSection === 'mods' && state.hostingModsSubView === 'browse') {
+      searchHostingModrinth({ append: false });
+    }
+  }
+
+  function populateNewServerModalVersions(filter = '') {
+    const sel = $('msrv-mc-select');
+    if (!sel) return;
+    const f = filter.trim().toLowerCase();
+    const list = (state.manifest?.versions || [])
+      .filter((v) => v.type === 'release')
+      .map((v) => v.id);
+    const items = (list.length ? list : ['26.3', '1.21.4', '1.20.4', '1.16.5', '1.12.2'])
+      .filter((id) => !f || id.toLowerCase().includes(f))
+      .slice(0, 60);
+    sel.innerHTML = '';
+    for (const id of items) {
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = id;
+      if (!f && id === '1.21.4') opt.selected = true;
+      sel.appendChild(opt);
+    }
+  }
+
+  function openNewServerModal() {
+    $('msrv-name').value = '';
+    $('msrv-slug').value = '';
+    $('msrv-domain-preview').textContent = 'ekipa-szczyt.peak';
+    $('msrv-mc-filter').value = '';
+    populateNewServerModalVersions('');
+    const ports = new Set((state.appState?.servers || []).map((s) => Number(s.port)));
+    let nextPort = 25565;
+    while (ports.has(nextPort) && nextPort < 65535) nextPort++;
+    $('msrv-port').value = String(nextPort);
+    $('msrv-ram').value = '3072';
+    $('msrv-nonpremium').checked = true;
+    $('msrv-eula').checked = true;
+    $('modal-server').classList.remove('hidden');
+    $('msrv-name').focus();
   }
 
   function wireEvents() {
@@ -1668,6 +2185,7 @@
         $('modal-account').classList.add('hidden');
         $('modal-profile').classList.add('hidden');
         $('modal-mod-details').classList.add('hidden');
+        $('modal-server').classList.add('hidden');
       }
     });
     $('btn-popover-add-account').addEventListener('click', () =>
@@ -2396,6 +2914,511 @@
         $('dock-progress-label').textContent = p.message;
       }
     });
+
+    /* ==================== HOSTING .PEAK EVENTS ==================== */
+    document.querySelectorAll('.hosting-nav-item').forEach((btn) => {
+      btn.addEventListener('click', () => switchHostingSection(btn.dataset.hostingSection));
+    });
+
+    $('btn-hosting-new-server').addEventListener('click', openNewServerModal);
+    $('modal-server-close').addEventListener('click', () => $('modal-server').classList.add('hidden'));
+    $('modal-server-cancel').addEventListener('click', () => $('modal-server').classList.add('hidden'));
+    $('msrv-name').addEventListener('input', (e) => {
+      if (!$('msrv-slug').dataset.userEdited) {
+        const s = sanitizeSlugClient(e.target.value);
+        $('msrv-slug').value = e.target.value.trim() ? s : '';
+        $('msrv-domain-preview').textContent = `${e.target.value.trim() ? s : 'ekipa-szczyt'}.peak`;
+      }
+    });
+    $('msrv-slug').addEventListener('input', (e) => {
+      e.target.dataset.userEdited = e.target.value.trim() ? '1' : '';
+      const s = sanitizeSlugClient(e.target.value || $('msrv-name').value);
+      $('msrv-domain-preview').textContent = `${s}.peak`;
+    });
+    $('msrv-mc-filter').addEventListener('input', (e) => populateNewServerModalVersions(e.target.value));
+    $('modal-server-save').addEventListener('click', async () => {
+      try {
+        const loader = document.querySelector('input[name="msrv-loader"]:checked')?.value || 'fabric';
+        const res = await api.hostingCreateServer({
+          name: $('msrv-name').value,
+          slug: $('msrv-slug').value || $('msrv-name').value,
+          mcVersion: $('msrv-mc-select').value,
+          loader,
+          port: Number($('msrv-port').value) || 25565,
+          ramMb: Number($('msrv-ram').value) || 3072,
+          onlineMode: !$('msrv-nonpremium').checked,
+          eulaAccepted: $('msrv-eula').checked
+        });
+        state.appState = res.state;
+        $('msrv-slug').dataset.userEdited = '';
+        $('modal-server').classList.add('hidden');
+        showToast(t('toast_server_created', { domain: res.server.peakDomain }), 'success');
+        await loadHostingView();
+        switchHostingSection('overview');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-import-peak').addEventListener('click', async () => {
+      try {
+        const res = await api.hostingImportPeakFile({});
+        if (res.canceled) return;
+        state.appState = res.state;
+        renderAll();
+        showToast(
+          t('toast_imported_peak', {
+            name: res.invite.serverName || res.invite.peakDomain,
+            mods: (res.installedMods || []).length
+          }),
+          'success'
+        );
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-start').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        if (!srv.eulaAccepted) {
+          showToast('Najpierw zaakceptuj Minecraft EULA w Ustawieniach serwera.', 'error');
+          switchHostingSection('settings');
+          return;
+        }
+        showToast(t('toast_server_started', { domain: srv.peakDomain }), 'info');
+        const res = await api.hostingStartServer(srv.id);
+        state.appState = res.state;
+        state.hostingStatuses[srv.id] = res.status;
+        renderHostingView();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-stop').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const st = await api.hostingStopServer(srv.id);
+        state.hostingStatuses[srv.id] = st;
+        showToast(t('toast_server_stopped', { domain: srv.peakDomain }), 'info');
+        renderHostingView();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-restart').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingRestartServer(srv.id);
+        if (res.state) state.appState = res.state;
+        state.hostingStatuses[srv.id] = res.status || res;
+        renderHostingView();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-join').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingJoinServer(srv.id);
+        state.appState = res.state;
+        renderPlayView();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-open-folder').addEventListener('click', () => {
+      const srv = getActiveServer();
+      if (srv) api.hostingOpenFolder(srv.id);
+    });
+
+    const copyLocal = () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      navigator.clipboard.writeText(`127.0.0.1:${srv.port}`);
+      showToast(`${t('toast_copied')} (127.0.0.1:${srv.port})`, 'info');
+    };
+    $('btn-hosting-copy-domain').addEventListener('click', copyLocal);
+    $('btn-copy-addr-local').addEventListener('click', copyLocal);
+    $('btn-copy-addr-lan').addEventListener('click', () => {
+      const txt = $('hosting-addr-lan').textContent;
+      navigator.clipboard.writeText(txt);
+      showToast(`${t('toast_copied')} (${txt})`, 'info');
+    });
+    const copyTunnel = () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      const addr = getServerStatusObj(srv.id).tunnel?.address;
+      if (!addr) return;
+      navigator.clipboard.writeText(addr);
+      showToast(`${t('toast_copied')} (${addr})`, 'info');
+    };
+    $('btn-copy-addr-tunnel').addEventListener('click', copyTunnel);
+    $('btn-hshare-copy-tunnel').addEventListener('click', copyTunnel);
+
+    const toggleTunnelHandler = async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      const rt = getServerStatusObj(srv.id);
+      try {
+        if (rt.tunnel?.active || rt.tunnel?.connecting) {
+          await api.hostingStopTunnel(srv.id);
+          showToast(t('toast_tunnel_closed'), 'info');
+        } else {
+          const tun = await api.hostingStartTunnel(srv.id);
+          showToast(t('toast_tunnel_ready', { address: tun.address }), 'success');
+        }
+        state.hostingStatuses[srv.id] = await api.hostingGetStatus(srv.id);
+        renderHostingView();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+    $('btn-hosting-toggle-tunnel-quick').addEventListener('click', toggleTunnelHandler);
+    $('btn-hosting-tunnel-toggle').addEventListener('click', toggleTunnelHandler);
+
+    const writeServersDatHandler = async (profileId) => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const rt = getServerStatusObj(srv.id);
+        const customAddr = rt.tunnel?.active && rt.tunnel?.address ? rt.tunnel.address : `127.0.0.1:${srv.port}`;
+        const res = await api.hostingAddToServersDat(srv.id, profileId || null, customAddr);
+        state.appState = res.state;
+        showToast(t('toast_added_serversdat', { domain: srv.peakDomain }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+    $('btn-hosting-add-serversdat').addEventListener('click', () => writeServersDatHandler(null));
+    $('btn-hosting-write-serversdat').addEventListener('click', () =>
+      writeServersDatHandler($('hosting-dat-profile-select').value)
+    );
+
+    const submitHostingCmd = async () => {
+      const srv = getActiveServer();
+      const input = $('hosting-cmd-input');
+      const cmd = input.value.trim();
+      if (!srv || !cmd) return;
+      try {
+        await api.hostingSendCommand(srv.id, cmd);
+        state.hostingCmdHistory.unshift(cmd);
+        if (state.hostingCmdHistory.length > 30) state.hostingCmdHistory.pop();
+        state.hostingCmdHistIdx = -1;
+        input.value = '';
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+    $('btn-hosting-send-cmd').addEventListener('click', submitHostingCmd);
+    $('hosting-cmd-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitHostingCmd();
+      } else if (e.key === 'ArrowUp' && state.hostingCmdHistory.length > 0) {
+        e.preventDefault();
+        state.hostingCmdHistIdx = Math.min(state.hostingCmdHistory.length - 1, state.hostingCmdHistIdx + 1);
+        $('hosting-cmd-input').value = state.hostingCmdHistory[state.hostingCmdHistIdx] || '';
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        state.hostingCmdHistIdx = Math.max(-1, state.hostingCmdHistIdx - 1);
+        $('hosting-cmd-input').value =
+          state.hostingCmdHistIdx >= 0 ? state.hostingCmdHistory[state.hostingCmdHistIdx] : '';
+      }
+    });
+    $('btn-cmd-op').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      const acc = getActiveAccount();
+      if (srv && acc) {
+        try {
+          await api.hostingSendCommand(srv.id, `op ${acc.username}`);
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      }
+    });
+    $('btn-cmd-save').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (srv) {
+        try {
+          await api.hostingSendCommand(srv.id, 'save-all');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      }
+    });
+    $('btn-cmd-day').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (srv) {
+        try {
+          await api.hostingSendCommand(srv.id, 'time set day');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      }
+    });
+    $('btn-hosting-clear-console').addEventListener('click', () => {
+      const srv = getActiveServer();
+      if (srv) {
+        state.hostingLogsByServer[srv.id] = [];
+        renderHostingConsole(srv.id);
+      }
+    });
+
+    // Server Mods pane
+    $('btn-hosting-switch-fabric').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingUpdateServer(srv.id, { loader: 'fabric', fabricVersion: 'latest' });
+        state.appState = res.state;
+        renderHostingView();
+        showToast(t('toast_server_saved', { domain: res.server.peakDomain }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+    $('btn-hosting-mods-restart').addEventListener('click', () => $('btn-hosting-restart').click());
+    $('btn-hosting-open-mods').addEventListener('click', () => {
+      const srv = getActiveServer();
+      if (srv) api.hostingOpenModsFolder(srv.id);
+    });
+    $('btn-hosting-pick-jars').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingPickAndImportMods(srv.id);
+        if (res.canceled) return;
+        state.hostingModsByServer[srv.id] = res.mods;
+        renderHostingView();
+        if (res.imported.length > 0) {
+          showToast(t('toast_server_mods_imported', { count: res.imported.length }), 'success');
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    const hDrop = $('hosting-mods-dropzone');
+    hDrop.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      hDrop.classList.add('dragover');
+    });
+    hDrop.addEventListener('dragleave', () => hDrop.classList.remove('dragover'));
+    hDrop.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      hDrop.classList.remove('dragover');
+      const srv = getActiveServer();
+      if (!srv) return;
+      const paths = Array.from(e.dataTransfer.files || [])
+        .map((f) => api.getFilePath(f))
+        .filter(Boolean);
+      if (paths.length === 0) return;
+      try {
+        const res = await api.hostingImportModPaths(srv.id, paths);
+        state.hostingModsByServer[srv.id] = res.mods;
+        renderHostingView();
+        showToast(t('toast_server_mods_imported', { count: res.imported.length }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    const installServerPackBtn = async (packId) => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        if (srv.loader !== 'fabric') {
+          const upd = await api.hostingUpdateServer(srv.id, { loader: 'fabric', fabricVersion: 'latest' });
+          state.appState = upd.state;
+        }
+        const res = await api.hostingInstallServerPack(srv.id, packId);
+        state.hostingModsByServer[srv.id] = res.mods;
+        renderHostingView();
+        showToast(t('toast_server_pack_installed', { count: res.installed.length }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+    $('btn-hpack-perf').addEventListener('click', () => installServerPackBtn('server_perf'));
+    $('btn-hpack-tools').addEventListener('click', () => installServerPackBtn('server_tools'));
+
+    $('btn-hosting-copy-from-profile').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingCopyFromProfile(srv.id, $('hosting-sync-profile-select').value);
+        state.hostingModsByServer[srv.id] = res.mods;
+        renderHostingView();
+        showToast(
+          t('toast_copied_from_profile', {
+            copied: res.copied.length,
+            skipped: res.skippedClientOnly.length
+          }),
+          'success'
+        );
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-sync-to-profile').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingSyncToProfile(srv.id, $('hosting-sync-profile-select').value);
+        showToast(t('toast_synced_to_profile', { copied: res.copied.length }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    const switchHostingModTab = (sub) => {
+      state.hostingModsSubView = sub;
+      $('btn-hosting-modtab-browse').classList.toggle('active', sub === 'browse');
+      $('btn-hosting-modtab-installed').classList.toggle('active', sub === 'installed');
+      $('hosting-modtab-browse').classList.toggle('active', sub === 'browse');
+      $('hosting-modtab-installed').classList.toggle('active', sub === 'installed');
+    };
+    $('btn-hosting-modtab-browse').addEventListener('click', () => switchHostingModTab('browse'));
+    $('btn-hosting-modtab-installed').addEventListener('click', () => switchHostingModTab('installed'));
+
+    let hSearchTimer = null;
+    $('hosting-modrinth-search').addEventListener('input', (e) => {
+      state.hostingModrinthQuery = e.target.value;
+      clearTimeout(hSearchTimer);
+      hSearchTimer = setTimeout(() => searchHostingModrinth({ append: false }), 260);
+    });
+    $('hosting-modrinth-sort').addEventListener('change', (e) => {
+      state.hostingModrinthSort = e.target.value;
+      searchHostingModrinth({ append: false });
+    });
+    document.querySelectorAll('#hosting-modrinth-cats .filter-pill').forEach((pill) => {
+      pill.addEventListener('click', () => {
+        document.querySelectorAll('#hosting-modrinth-cats .filter-pill').forEach((p) => p.classList.remove('active'));
+        pill.classList.add('active');
+        state.hostingModrinthCategory = pill.dataset.cat || 'all';
+        searchHostingModrinth({ append: false });
+      });
+    });
+    $('btn-hosting-modrinth-more').addEventListener('click', () => {
+      state.hostingModrinthOffset += 24;
+      searchHostingModrinth({ append: true });
+    });
+
+    // Server Settings pane
+    $('hset-ram-slider').addEventListener('input', (e) => {
+      const mb = Number(e.target.value);
+      $('hset-ram-val').textContent = `${mb} MB · ${(mb / 1024).toFixed(1)} GB`;
+    });
+    $('link-eula-external').addEventListener('click', (e) => {
+      e.preventDefault();
+      api.openExternal('https://aka.ms/MinecraftEULA');
+    });
+    $('btn-hosting-save-settings').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingUpdateServer(srv.id, {
+          name: $('hset-name').value,
+          slug: $('hset-slug').value,
+          loader: $('hset-loader').value,
+          mcVersion: $('hset-mc-version').value,
+          port: Number($('hset-port').value) || 25565,
+          maxPlayers: Number($('hset-maxplayers').value) || 10,
+          ramMb: Number($('hset-ram-slider').value) || 2048,
+          gamemode: $('hset-gamemode').value,
+          difficulty: $('hset-difficulty').value,
+          viewDistance: Number($('hset-viewdist').value) || 10,
+          seed: $('hset-seed').value,
+          motd: $('hset-motd').value,
+          onlineMode: !$('hset-nonpremium').checked,
+          pvp: $('hset-pvp').checked,
+          whitelist: $('hset-whitelist').checked,
+          commandBlocks: $('hset-cmdblocks').checked,
+          eulaAccepted: $('hset-eula').checked
+        });
+        state.appState = res.state;
+        renderHostingView();
+        showToast(
+          res.restartRequired
+            ? t('toast_server_restart_req')
+            : t('toast_server_saved', { domain: res.server.peakDomain }),
+          'success'
+        );
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+    $('btn-hosting-delete-server').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      const msg = t('confirm_delete_server', { name: srv.name, domain: srv.peakDomain });
+      if (!window.confirm(msg)) return;
+      try {
+        state.appState = await api.hostingDeleteServer(srv.id, true);
+        showToast(t('toast_server_deleted'), 'info');
+        await loadHostingView();
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    $('btn-hosting-export-peak').addEventListener('click', async () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      try {
+        const res = await api.hostingExportPeakFile(srv.id);
+        if (!res.canceled) {
+          showToast(t('toast_exported_peak', { domain: srv.peakDomain }), 'success');
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    api.onHostingStatus((st) => {
+      if (!st || !st.serverId) return;
+      state.hostingStatuses[st.serverId] = st;
+      renderHostingNavDot();
+      if (state.activeView === 'hosting') {
+        const active = getActiveServer();
+        if (active && active.id === st.serverId) {
+          renderHostingView();
+        }
+      }
+    });
+    api.onHostingLog((entry) => appendHostingLog(entry));
+    api.onHostingProgress((p) => {
+      const active = getActiveServer();
+      if (!p || (p.serverId && active && p.serverId !== active.id)) return;
+      const box = $('hosting-progress-box');
+      if (!box) return;
+      if (p.percent >= 100) {
+        setTimeout(() => box.classList.add('hidden'), 1200);
+      } else {
+        box.classList.remove('hidden');
+      }
+      if (p.message) $('hosting-progress-label').textContent = p.message;
+      if (typeof p.percent === 'number') {
+        $('hosting-progress-bar').style.width = `${p.percent}%`;
+        $('hosting-progress-pct').textContent = `${p.percent}%`;
+      }
+    });
+    api.onHostingTunnel((payload) => {
+      if (!payload || !payload.serverId) return;
+      const cur = state.hostingStatuses[payload.serverId] || getServerStatusObj(payload.serverId);
+      state.hostingStatuses[payload.serverId] = { ...cur, tunnel: payload.tunnel };
+      if (state.activeView === 'hosting') renderHostingView();
+    });
   }
 
   async function init() {
@@ -2403,7 +3426,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.4.1 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.5.0 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

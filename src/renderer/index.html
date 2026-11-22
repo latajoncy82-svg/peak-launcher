@@ -31,6 +31,10 @@
       <button class="top-nav-item active" type="button" data-view="play" data-i18n="nav_play">Graj</button>
       <button class="top-nav-item" type="button" data-view="mods" data-i18n="nav_mods">Mody</button>
       <button class="top-nav-item" type="button" data-view="skins" data-i18n="nav_skins">Skiny</button>
+      <button class="top-nav-item" type="button" data-view="hosting">
+        <span data-i18n="nav_hosting">Serwer .peak</span>
+        <span class="nav-live-dot hidden" id="nav-hosting-live"></span>
+      </button>
       <button class="top-nav-item" type="button" data-view="versions" data-i18n="nav_versions">Wersje</button>
       <button class="top-nav-item" type="button" data-view="java">
         <span data-i18n="nav_java">Java i Fabric</span>
@@ -387,6 +391,424 @@
       </div>
     </section>
 
+    <!-- VIEW 2C: HOSTING .PEAK OVERLAY -->
+    <section id="view-hosting" class="view view-overlay">
+      <div class="overlay-container">
+        <div class="overlay-header">
+          <div>
+            <h1 data-i18n="hosting_title">Hosting .peak</h1>
+            <p data-i18n="hosting_sub">Własny serwer Minecraft u Ciebie na komputerze z adresem .peak, modami serwerowymi i tunelem dla znajomych.</p>
+          </div>
+          <div class="overlay-header-actions">
+            <button id="btn-hosting-import-peak" class="btn-outline" type="button" data-i18n="btn_import_peak">Importuj .peak</button>
+            <button id="btn-hosting-new-server" class="btn-accent" type="button" data-i18n="btn_new_server">+ Nowy serwer</button>
+          </div>
+        </div>
+
+        <div class="hosting-workspace">
+          <!-- Left Sidebar: .peak Servers List + Section Tabs -->
+          <aside class="hosting-sidebar">
+            <div class="hosting-sidebar-label" data-i18n="hosting_servers_list">Twoje serwery .peak</div>
+            <div id="hosting-servers-list" class="hosting-servers-list"></div>
+
+            <div class="settings-nav-sep"></div>
+
+            <button class="settings-nav-item hosting-nav-item active" type="button" data-hosting-section="overview">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="2.8" width="12" height="10.4" rx="2" />
+                  <path d="M4.8 6.4L7 8.4 4.8 10.4M8.4 10.4h2.8" />
+                </svg>
+                <span data-i18n="hnav_overview">Panel i Konsola</span>
+              </span>
+              <span id="nav-hosting-status-dot" class="console-dot"></span>
+            </button>
+
+            <button class="settings-nav-item hosting-nav-item" type="button" data-hosting-section="mods">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M8 2L13.5 5v6L8 14l-5.5-3V5L8 2z" />
+                  <path d="M8 8v6M8 8l5.5-3M8 8L2.5 5" />
+                </svg>
+                <span data-i18n="hnav_mods">Mody serwera</span>
+              </span>
+              <span id="nav-hosting-mods-count" class="quiet-pill">0</span>
+            </button>
+
+            <button class="settings-nav-item hosting-nav-item" type="button" data-hosting-section="settings">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="8" cy="8" r="2.2" />
+                  <path d="M8 2v1.6M8 12.4V14M2 8h1.6M12.4 8H14M3.8 3.8l1.1 1.1M11.1 11.1l1.1 1.1M12.2 3.8l-1.1 1.1M4.9 11.1l-1.1 1.1" />
+                </svg>
+                <span data-i18n="hnav_settings">Ustawienia i świat</span>
+              </span>
+            </button>
+
+            <button class="settings-nav-item hosting-nav-item" type="button" data-hosting-section="share">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="3.5" r="1.8" />
+                  <circle cx="4" cy="8" r="1.8" />
+                  <circle cx="12" cy="12.5" r="1.8" />
+                  <path d="M5.6 7.1l4.8-2.7M5.6 8.9l4.8 2.7" />
+                </svg>
+                <span data-i18n="hnav_share">Udostępnianie .peak</span>
+              </span>
+            </button>
+          </aside>
+
+          <!-- Right Content -->
+          <div class="hosting-content">
+            <!-- PANE 1: OVERVIEW & LIVE CONSOLE -->
+            <div id="hosting-pane-overview" class="settings-pane active">
+              <section class="settings-card">
+                <div class="hosting-hero-head">
+                  <div class="hosting-hero-title">
+                    <div class="hosting-title-line">
+                      <h2 id="hosting-srv-name">Szczyt Survival</h2>
+                      <button id="btn-hosting-copy-domain" class="peak-domain-chip" type="button" title="Kopiuj adres .peak">
+                        <span id="hosting-srv-domain">szczyt.peak</span>
+                      </button>
+                    </div>
+                    <div class="hosting-badges-row">
+                      <span id="hosting-srv-engine" class="quiet-pill">Fabric · 1.21.4</span>
+                      <span id="hosting-srv-port-pill" class="quiet-pill">:25565</span>
+                      <span id="hosting-srv-ram-pill" class="quiet-pill">4.0 GB RAM</span>
+                    </div>
+                  </div>
+                  <div class="hosting-status-cluster">
+                    <span id="hosting-status-badge" class="hosting-status-pill offline">Offline</span>
+                    <span id="hosting-players-badge" class="quiet-pill">0 / 10</span>
+                  </div>
+                </div>
+
+                <div class="hosting-actions-bar">
+                  <button id="btn-hosting-start" class="btn-accent" type="button" data-i18n="btn_start_server">Uruchom serwer</button>
+                  <button id="btn-hosting-stop" class="btn-danger-sm hidden" type="button" data-i18n="btn_stop_server">Zatrzymaj serwer</button>
+                  <button id="btn-hosting-restart" class="btn-outline hidden" type="button" data-i18n="btn_restart_server">Restart</button>
+                  <button id="btn-hosting-join" class="btn-outline" type="button" data-i18n="btn_join_server">Dołącz do gry</button>
+                  <button id="btn-hosting-open-folder" class="btn-outline" type="button" data-i18n="btn_server_folder">Folder serwera</button>
+                </div>
+
+                <div id="hosting-progress-box" class="inline-progress hidden">
+                  <div class="progress-text-row">
+                    <span id="hosting-progress-label">Przygotowanie środowiska serwera...</span>
+                    <span id="hosting-progress-pct">0%</span>
+                  </div>
+                  <div class="progress-track">
+                    <div id="hosting-progress-bar" class="progress-fill"></div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="hosting-addr-grid">
+                  <div class="hosting-addr-card">
+                    <span class="hosting-addr-label" data-i18n="addr_local_label">Twój adres lokalny (.peak)</span>
+                    <strong id="hosting-addr-peak" class="hosting-addr-val">szczyt.peak</strong>
+                    <span id="hosting-addr-loopback" class="hosting-addr-sub">127.0.0.1:25565</span>
+                    <div class="hosting-addr-btns">
+                      <button id="btn-copy-addr-local" class="btn-outline" type="button" data-i18n="btn_copy">Kopiuj</button>
+                      <button id="btn-hosting-add-serversdat" class="btn-outline" type="button" data-i18n="btn_add_serversdat">+ Do listy MC</button>
+                    </div>
+                  </div>
+
+                  <div class="hosting-addr-card">
+                    <span class="hosting-addr-label" data-i18n="addr_lan_label">Sieć domowa (LAN / Wi-Fi)</span>
+                    <strong id="hosting-addr-lan" class="hosting-addr-val">192.168.1.10:25565</strong>
+                    <span class="hosting-addr-sub" data-i18n="addr_lan_sub">Dla osób w tej samej sieci Wi-Fi</span>
+                    <div class="hosting-addr-btns">
+                      <button id="btn-copy-addr-lan" class="btn-outline" type="button" data-i18n="btn_copy">Kopiuj</button>
+                    </div>
+                  </div>
+
+                  <div class="hosting-addr-card">
+                    <span class="hosting-addr-label" data-i18n="addr_tunnel_label">Tunel publiczny (Internet)</span>
+                    <strong id="hosting-addr-tunnel" class="hosting-addr-val" data-i18n="tunnel_off">Wyłączony</strong>
+                    <span id="hosting-addr-tunnel-sub" class="hosting-addr-sub" data-i18n="addr_tunnel_sub">Bez przekierowania portów</span>
+                    <div class="hosting-addr-btns">
+                      <button id="btn-hosting-toggle-tunnel-quick" class="btn-outline" type="button" data-i18n="btn_enable_tunnel">Włącz tunel</button>
+                      <button id="btn-copy-addr-tunnel" class="btn-outline hidden" type="button" data-i18n="btn_copy">Kopiuj</button>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="console-header">
+                  <div class="console-status">
+                    <span id="hosting-console-dot" class="console-dot"></span>
+                    <span id="hosting-console-status-text" data-i18n="hosting_console_title">Konsola serwera na żywo</span>
+                  </div>
+                  <div class="console-actions">
+                    <button id="btn-cmd-op" class="filter-pill" type="button" data-i18n="cmd_op_self">Daj OP sobie</button>
+                    <button id="btn-cmd-save" class="filter-pill" type="button" data-i18n="cmd_save_world">Zapisz świat</button>
+                    <button id="btn-cmd-day" class="filter-pill" type="button" data-i18n="cmd_set_day">Dzień</button>
+                    <button id="btn-hosting-clear-console" class="btn-outline" type="button" data-i18n="btn_clear_console">Wyczyść</button>
+                  </div>
+                </div>
+
+                <div id="hosting-console-output" class="console-output hosting-console-output"></div>
+
+                <div class="hosting-cmd-row">
+                  <input id="hosting-cmd-input" class="mono-input" type="text" data-i18n-placeholder="hosting_cmd_ph" placeholder="Wpisz komendę serwera (np. op Nick, gamemode creative Nick, whitelist add Nick)..." />
+                  <button id="btn-hosting-send-cmd" class="btn-accent" type="button" data-i18n="btn_send">Wyślij</button>
+                </div>
+              </section>
+            </div>
+
+            <!-- PANE 2: SERVER MODS -->
+            <div id="hosting-pane-mods" class="settings-pane">
+              <div id="hosting-vanilla-callout" class="callout-banner hidden">
+                <span data-i18n="hosting_vanilla_callout">Ten serwer używa czystego Minecrafta (Vanilla). Przełącz silnik na Fabric, aby instalować mody serwerowe.</span>
+                <button id="btn-hosting-switch-fabric" class="btn-accent" type="button" data-i18n="switch_to_fabric">Przełącz na Fabric</button>
+              </div>
+
+              <div id="hosting-mods-restart-banner" class="callout-banner hidden">
+                <span data-i18n="hosting_mods_restart_note">Serwer jest uruchomiony — nowe lub wyłączone mody zaczną działać po restarcie.</span>
+                <button id="btn-hosting-mods-restart" class="btn-outline" type="button" data-i18n="btn_restart_now">Restartuj teraz</button>
+              </div>
+
+              <div id="hosting-mods-dropzone" class="mods-dropzone">
+                <div>
+                  <strong data-i18n="hmods_drop_title">Upuść pliki modów serwerowych (.jar) tutaj</strong>
+                  <p data-i18n="hmods_drop_sub">lub wybierz pliki z dysku, aby wgrać je do folderu mods serwera</p>
+                </div>
+                <div class="dropzone-actions">
+                  <button id="btn-hosting-open-mods" class="btn-outline" type="button" data-i18n="folder_mods">Folder mods</button>
+                  <button id="btn-hosting-pick-jars" class="btn-accent" type="button" data-i18n="btn_pick_files">Dodaj pliki</button>
+                </div>
+              </div>
+
+              <section class="settings-card">
+                <div class="hosting-packs-sync-row">
+                  <div class="quick-packs-inline">
+                    <span class="quick-packs-label" data-i18n="hpacks_label">Paczki serwerowe Peak:</span>
+                    <button id="btn-hpack-perf" class="pack-pill" type="button" data-i18n="hpack_perf">⚡ Serwer Performance</button>
+                    <button id="btn-hpack-tools" class="pack-pill" type="button" data-i18n="hpack_tools">🎙 Admin &amp; Voice Chat</button>
+                  </div>
+                  <div class="hosting-sync-controls">
+                    <select id="hosting-sync-profile-select" aria-label="Profil do synchronizacji"></select>
+                    <button id="btn-hosting-copy-from-profile" class="btn-outline" type="button" data-i18n="btn_copy_from_profile">Skopiuj z profilu</button>
+                    <button id="btn-hosting-sync-to-profile" class="btn-outline" type="button" data-i18n="btn_sync_to_profile">Wgraj na profil</button>
+                  </div>
+                </div>
+              </section>
+
+              <div class="subtab-bar">
+                <div class="subtab-group">
+                  <button class="subtab-btn active" type="button" id="btn-hosting-modtab-browse" data-i18n="htab_browse">Modrinth (Mody serwerowe)</button>
+                  <button class="subtab-btn" type="button" id="btn-hosting-modtab-installed">
+                    <span data-i18n="tab_installed">Zainstalowane</span>
+                    <span id="hosting-installed-count" class="count-pill">0</span>
+                  </button>
+                </div>
+                <span id="hosting-modrinth-total" class="quiet-pill"></span>
+              </div>
+
+              <div id="hosting-modtab-browse" class="modtab-panel active">
+                <div class="toolbar-row">
+                  <input id="hosting-modrinth-search" class="search-input" type="search" data-i18n-placeholder="hmods_search_ph" placeholder="Szukaj modów serwerowych Modrinth (Lithium, Simple Voice Chat, Chunky)..." />
+                  <select id="hosting-modrinth-sort" class="sort-select">
+                    <option value="auto" data-i18n="sort_auto">Sortowanie: Auto</option>
+                    <option value="downloads" data-i18n="sort_downloads">Najpopularniejsze</option>
+                    <option value="updated" data-i18n="sort_updated">Ostatnio zaktualizowane</option>
+                    <option value="newest" data-i18n="sort_newest">Najnowsze</option>
+                  </select>
+                </div>
+
+                <div class="filter-pills" id="hosting-modrinth-cats">
+                  <button class="filter-pill active" type="button" data-cat="all" data-i18n="cat_all">Wszystkie</button>
+                  <button class="filter-pill" type="button" data-cat="optimization" data-i18n="cat_optimization">Optymalizacja</button>
+                  <button class="filter-pill" type="button" data-cat="utility" data-i18n="cat_utility">Narzędzia</button>
+                  <button class="filter-pill" type="button" data-cat="adventure" data-i18n="cat_adventure">Przygoda</button>
+                  <button class="filter-pill" type="button" data-cat="worldgen" data-i18n="cat_worldgen">Świat</button>
+                  <button class="filter-pill" type="button" data-cat="technology" data-i18n="cat_technology">Technologia</button>
+                </div>
+
+                <div id="hosting-modrinth-grid" class="modrinth-grid"></div>
+                <div id="hosting-modrinth-more-wrap" class="load-more-wrap hidden">
+                  <button id="btn-hosting-modrinth-more" class="btn-outline" type="button">Pokaż więcej</button>
+                </div>
+              </div>
+
+              <div id="hosting-modtab-installed" class="modtab-panel">
+                <div id="hosting-installed-mods-list" class="installed-mods-list"></div>
+              </div>
+            </div>
+
+            <!-- PANE 3: SERVER SETTINGS & WORLD (server.properties) -->
+            <div id="hosting-pane-settings" class="settings-pane">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="hset_identity_title">Adres .peak, Silnik i Zasoby</h3>
+                </div>
+                <div class="form-grid">
+                  <label class="stack-field">
+                    <span data-i18n="hset_name">Nazwa serwera</span>
+                    <input id="hset-name" type="text" maxlength="40" />
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="hset_slug">Własny adres .peak</span>
+                    <div class="peak-slug-input-wrap">
+                      <input id="hset-slug" class="mono-input" type="text" maxlength="24" />
+                      <span class="peak-slug-suffix">.peak</span>
+                    </div>
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="hset_loader">Silnik serwera</span>
+                    <select id="hset-loader">
+                      <option value="fabric">Fabric (Mody)</option>
+                      <option value="vanilla">Vanilla (Bez modów)</option>
+                    </select>
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="label_mc_ver">Wersja Minecraft</span>
+                    <select id="hset-mc-version"></select>
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="hset_port">Port TCP serwera</span>
+                    <input id="hset-port" type="number" min="1024" max="65535" value="25565" />
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="hset_maxplayers">Maks. graczy</span>
+                    <input id="hset-maxplayers" type="number" min="1" max="100" value="10" />
+                  </label>
+                </div>
+
+                <div class="hosting-ram-box">
+                  <div class="settings-card-head">
+                    <span data-i18n="hset_ram">Pamięć RAM dla serwera</span>
+                    <strong id="hset-ram-val" class="ram-readout">2048 MB · 2.0 GB</strong>
+                  </div>
+                  <input id="hset-ram-slider" class="peak-slider" type="range" min="1024" max="16384" step="512" value="2048" />
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="hset_world_title">Zasady świata (server.properties)</h3>
+                </div>
+                <div class="form-grid">
+                  <label class="stack-field">
+                    <span data-i18n="hset_gamemode">Tryb gry</span>
+                    <select id="hset-gamemode">
+                      <option value="survival">Survival</option>
+                      <option value="creative">Creative</option>
+                      <option value="adventure">Adventure</option>
+                      <option value="spectator">Spectator</option>
+                    </select>
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="hset_difficulty">Poziom trudności</span>
+                    <select id="hset-difficulty">
+                      <option value="peaceful">Peaceful</option>
+                      <option value="easy">Easy</option>
+                      <option value="normal">Normal</option>
+                      <option value="hard">Hard</option>
+                    </select>
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="hset_viewdist">Zasięg widzenia (chunki)</span>
+                    <input id="hset-viewdist" type="number" min="4" max="32" value="10" />
+                  </label>
+                  <label class="stack-field">
+                    <span data-i18n="hset_seed">Seed świata (opcjonalny)</span>
+                    <input id="hset-seed" class="mono-input" type="text" />
+                  </label>
+                </div>
+                <label class="stack-field">
+                  <span data-i18n="hset_motd">Opis na liście serwerów (MOTD)</span>
+                  <input id="hset-motd" type="text" maxlength="100" />
+                </label>
+
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="hset_nonpremium">Tryb Offline / Non-Premium (dla graczy Peak Launcher)</strong>
+                    <span data-i18n="hset_nonpremium_sub">Ustawia online-mode=false, pozwalając dołączać z kont offline bez autoryzacji Mojang.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="hset-nonpremium" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="hosting-toggles-grid">
+                  <label class="checkbox-row">
+                    <input id="hset-pvp" type="checkbox" checked />
+                    <span data-i18n="hset_pvp">PvP (walka między graczami)</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="hset-whitelist" type="checkbox" />
+                    <span data-i18n="hset_whitelist">Biała lista (Whitelist)</span>
+                  </label>
+                  <label class="checkbox-row">
+                    <input id="hset-cmdblocks" type="checkbox" />
+                    <span data-i18n="hset_cmdblocks">Bloki poleceń (Command Blocks)</span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="hset_eula">Akceptuję Minecraft End User License Agreement (EULA)</strong>
+                    <span>
+                      <span data-i18n="hset_eula_sub">Wymagane przez Mojang przed uruchomieniem serwera:</span>
+                      <a href="#" id="link-eula-external" class="text-link">aka.ms/MinecraftEULA ↗</a>
+                    </span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="hset-eula" type="checkbox" />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+                <div class="hosting-settings-footer">
+                  <button id="btn-hosting-delete-server" class="btn-danger-sm" type="button" data-i18n="btn_delete_server">Usuń serwer</button>
+                  <button id="btn-hosting-save-settings" class="btn-accent" type="button" data-i18n="btn_save_server">Zapisz ustawienia</button>
+                </div>
+              </section>
+            </div>
+
+            <!-- PANE 4: SHARING & .PEAK INVITES -->
+            <div id="hosting-pane-share" class="settings-pane">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <div>
+                    <h3 data-i18n="hshare_tunnel_title">Tunel Publiczny .peak (gra przez Internet)</h3>
+                    <p data-i18n="hshare_tunnel_sub">Udostępnij swój lokalny serwer znajomym spoza sieci Wi-Fi bez przekierowywania portów na routerze.</p>
+                  </div>
+                  <button id="btn-hosting-tunnel-toggle" class="btn-accent" type="button" data-i18n="btn_enable_tunnel">Włącz tunel</button>
+                </div>
+
+                <div class="datadir-path-bar">
+                  <code id="hshare-tunnel-address">Tunel wyłączony — włącz, aby wygenerować publiczny adres IP:Port</code>
+                  <button id="btn-hshare-copy-tunnel" class="btn-outline" type="button" data-i18n="btn_copy">Kopiuj</button>
+                </div>
+                <p class="field-hint" data-i18n="hshare_tunnel_note">Korzysta z szyfrowanego przekierowania TCP przez OpenSSH (Pinggy Free — darmowa sesja ~60 min bez konta, odnawialna 1 kliknięciem).</p>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="hshare_invite_title">Plik zaproszenia .peak &amp; Lista serwerów MC</h3>
+                  <p data-i18n="hshare_invite_sub">Zapisz plik .peak z adresem i listą modów serwera — znajomy po kliknięciu „Importuj .peak” automatycznie pobierze paczkę modów i doda serwer do gry.</p>
+                </div>
+
+                <div class="hosting-share-actions">
+                  <button id="btn-hosting-export-peak" class="btn-accent" type="button" data-i18n="btn_export_peak">Eksportuj zaproszenie .peak</button>
+                  <div class="hosting-dat-row">
+                    <select id="hosting-dat-profile-select"></select>
+                    <button id="btn-hosting-write-serversdat" class="btn-outline" type="button" data-i18n="btn_write_serversdat">Zapisz w servers.dat gry</button>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- VIEW 3: VERSIONS OVERLAY -->
     <section id="view-versions" class="view view-overlay">
       <div class="overlay-container">
@@ -574,7 +996,7 @@
             </button>
 
             <div class="settings-sidebar-meta">
-              <span>Peak Launcher v1.3.2</span>
+              <span>Peak Launcher v1.5.0</span>
               <span>Windows x64 · MIT</span>
             </div>
           </aside>
@@ -792,7 +1214,7 @@
                 <div class="diag-grid">
                   <div class="diag-card">
                     <span data-i18n="diag_version">Wersja launchera</span>
-                    <strong id="diag-version">v1.4.1</strong>
+                    <strong id="diag-version">v1.5.0</strong>
                   </div>
                   <div class="diag-card">
                     <span data-i18n="diag_ram">Pamięć systemu</span>
@@ -984,6 +1406,88 @@
       </div>
       <div class="modal-footer">
         <button id="modal-account-done" class="btn-outline" type="button" data-i18n="btn_close">Zamknij</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: CREATE NEW .PEAK SERVER -->
+  <div id="modal-server" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-server-title">
+    <div class="modal-card modal-md">
+      <div class="modal-header">
+        <h2 id="modal-server-title" data-i18n="modal_server_title">Nowy serwer .peak</h2>
+        <button id="modal-server-close" class="modal-close" type="button" aria-label="Zamknij">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-grid">
+          <label class="stack-field">
+            <span data-i18n="hset_name">Nazwa serwera</span>
+            <input id="msrv-name" type="text" maxlength="40" data-i18n-placeholder="msrv_name_ph" placeholder="np. Ekipa Szczyt" />
+          </label>
+          <label class="stack-field">
+            <span data-i18n="hset_slug">Własny adres .peak</span>
+            <div class="peak-slug-input-wrap">
+              <input id="msrv-slug" class="mono-input" type="text" maxlength="24" placeholder="ekipa-szczyt" />
+              <span class="peak-slug-suffix">.peak</span>
+            </div>
+          </label>
+        </div>
+        <p class="field-hint"><span data-i18n="msrv_domain_hint">Twój adres w sieci Peak:</span> <code id="msrv-domain-preview">ekipa-szczyt.peak</code></p>
+
+        <div class="form-grid">
+          <label class="stack-field">
+            <span data-i18n="filter_mc_label">Szukaj wersji Minecraft</span>
+            <input id="msrv-mc-filter" type="search" data-i18n-placeholder="filter_mc_ph" placeholder="np. 1.21.4 lub 26.3" />
+          </label>
+          <label class="stack-field">
+            <span data-i18n="label_mc_ver">Wersja Minecraft</span>
+            <select id="msrv-mc-select"></select>
+          </label>
+        </div>
+
+        <div class="loader-radio-group">
+          <span class="group-label" data-i18n="hset_loader">Silnik serwera</span>
+          <div class="loader-options">
+            <label class="loader-choice">
+              <input type="radio" name="msrv-loader" value="fabric" checked />
+              <div>
+                <strong>Fabric Server</strong>
+                <span data-i18n="msrv_fabric_desc">Mody z Modrinth i .jar + Vanilla klienci (opcjonalne mody)</span>
+              </div>
+            </label>
+            <label class="loader-choice">
+              <input type="radio" name="msrv-loader" value="vanilla" />
+              <div>
+                <strong>Vanilla Server</strong>
+                <span data-i18n="msrv_vanilla_desc">Oryginalny silnik Mojang bez modów</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-grid">
+          <label class="stack-field">
+            <span data-i18n="hset_port">Port TCP serwera</span>
+            <input id="msrv-port" type="number" min="1024" max="65535" value="25565" />
+          </label>
+          <label class="stack-field">
+            <span data-i18n="hset_ram">Pamięć RAM (MB)</span>
+            <input id="msrv-ram" type="number" min="1024" max="32768" step="512" value="3072" />
+          </label>
+        </div>
+
+        <label class="checkbox-row">
+          <input id="msrv-nonpremium" type="checkbox" checked />
+          <span data-i18n="hset_nonpremium">Tryb Offline / Non-Premium (dla graczy Peak Launcher)</span>
+        </label>
+
+        <label class="checkbox-row">
+          <input id="msrv-eula" type="checkbox" checked />
+          <span data-i18n="hset_eula">Akceptuję Minecraft End User License Agreement (EULA)</span>
+        </label>
+      </div>
+      <div class="modal-footer">
+        <button id="modal-server-cancel" class="btn-outline" type="button" data-i18n="btn_cancel">Anuluj</button>
+        <button id="modal-server-save" class="btn-accent" type="button" data-i18n="btn_create_server">Utwórz serwer .peak</button>
       </div>
     </div>
   </div>

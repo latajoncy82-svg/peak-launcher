@@ -9,7 +9,7 @@ try {
   electronApp = null;
 }
 
-const USER_AGENT = 'PeakLauncher/1.4.1 (Windows x64)';
+const USER_AGENT = 'PeakLauncher/1.5.0 (Windows x64)';
 
 function ensureDir(dirPath) {
   if (!dirPath) return dirPath;
@@ -70,6 +70,7 @@ function getPaths(dataDir) {
     assetsDir: path.join(root, 'assets'),
     runtimesDir: path.join(root, 'runtimes'),
     instancesDir: path.join(root, 'instances'),
+    serversDir: path.join(root, 'servers'),
     skinsDir: path.join(root, 'skins'),
     skinsLibraryDir: path.join(root, 'skins', 'library'),
     cacheDir: path.join(root, 'cache'),
@@ -92,6 +93,22 @@ function getProfileDirs(dataDir, profileId) {
   };
 }
 
+function getServerDirs(dataDir, serverId) {
+  const paths = getPaths(dataDir);
+  const safeId = sanitizeProfileId(serverId || 'server');
+  const serverDir = path.join(paths.serversDir, safeId);
+  return {
+    serverDir,
+    modsDir: path.join(serverDir, 'mods'),
+    worldDir: path.join(serverDir, 'world'),
+    logsDir: path.join(serverDir, 'logs'),
+    propertiesPath: path.join(serverDir, 'server.properties'),
+    eulaPath: path.join(serverDir, 'eula.txt'),
+    modsMetaPath: path.join(serverDir, '.peak-mods.json'),
+    runtimeMetaPath: path.join(serverDir, '.peak-server-runtime.json')
+  };
+}
+
 function ensureDataTree(dataDir) {
   const paths = getPaths(dataDir);
   ensureDir(paths.root);
@@ -100,6 +117,7 @@ function ensureDataTree(dataDir) {
   ensureDir(paths.assetsDir);
   ensureDir(paths.runtimesDir);
   ensureDir(paths.instancesDir);
+  ensureDir(paths.serversDir);
   ensureDir(paths.skinsDir);
   ensureDir(paths.skinsLibraryDir);
   ensureDir(paths.cacheDir);
@@ -116,5 +134,6 @@ module.exports = {
   sanitizeProfileId,
   getPaths,
   getProfileDirs,
+  getServerDirs,
   ensureDataTree
 };

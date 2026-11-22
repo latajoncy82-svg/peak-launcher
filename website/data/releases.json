@@ -1,5 +1,27 @@
 [
   {
+    "tag": "v1.5.0",
+    "name": "Peak Launcher 1.5.0 — Własny Hosting .peak i Mody Serwerowe",
+    "publishedAt": "2026-11-22T19:15:00Z",
+    "body": "### Najważniejsze nowości w wersji 1.5.0\n- **Własny Hosting `.peak` na komputerze (`Serwer .peak`)**: uruchamiaj lokalne serwery Minecraft **Fabric** i **Vanilla** z markowym adresem `<nazwa>.peak`, automatycznym pobieraniem JAR serwera, konsolą na żywo, edytorem `server.properties` i akceptacją EULA.\n- **Mody serwerowe 1 kliknięciem & synchronizacja**: katalog Modrinth odfiltrowany do modów serwerowych (`server_side: required/optional`), paczki serwerowe (`Lithium`, `FerriteCore`, `Krypton`, `spark`, `Chunky`, `Simple Voice Chat`), Drag & Drop `.jar` oraz kopiowanie modów między profilem a serwerem.\n- **Tunel publiczny i zaproszenia `.peak`**: opcjonalny darmowy tunel TCP bez przekierowania portów routera, zapis do `servers.dat`, przycisk **Dołącz do gry** i eksport/import plików `.peak`.",
+    "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.5.0",
+    "prerelease": false,
+    "assets": {
+      "installer": {
+        "name": "Peak-Launcher-Setup-1.5.0.exe",
+        "size": 123406811,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.5.0/Peak-Launcher-Setup-1.5.0.exe",
+        "downloadCount": 0
+      },
+      "portable": {
+        "name": "Peak-Launcher-Portable-1.5.0.exe",
+        "size": 112087494,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.5.0/Peak-Launcher-Portable-1.5.0.exe",
+        "downloadCount": 0
+      }
+    }
+  },
+  {
     "tag": "v1.4.1",
     "name": "Peak Launcher 1.4.1 — Dopracowany Pasek Górny i Studio Skinów 3D",
     "publishedAt": "2026-11-22T18:50:00Z",

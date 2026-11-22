@@ -61,10 +61,10 @@ function startTempServer() {
 }
 
 async function run() {
-  const setupPath = path.join(DIST_DIR, 'Peak-Launcher-Setup-1.4.1.exe');
-  const portablePath = path.join(DIST_DIR, 'Peak-Launcher-Portable-1.4.1.exe');
-  assert(fs.existsSync(setupPath), 'Brak pliku Peak-Launcher-Setup-1.4.1.exe');
-  assert(fs.existsSync(portablePath), 'Brak pliku Peak-Launcher-Portable-1.4.1.exe');
+  const setupPath = path.join(DIST_DIR, 'Peak-Launcher-Setup-1.5.0.exe');
+  const portablePath = path.join(DIST_DIR, 'Peak-Launcher-Portable-1.5.0.exe');
+  assert(fs.existsSync(setupPath), 'Brak pliku Peak-Launcher-Setup-1.5.0.exe');
+  assert(fs.existsSync(portablePath), 'Brak pliku Peak-Launcher-Portable-1.5.0.exe');
 
   const server = await startTempServer();
   const { port } = server.address();
@@ -87,6 +87,7 @@ async function run() {
       '/assets/screen-light.png',
       '/assets/screen-mods.png',
       '/assets/screen-skins.png',
+      '/assets/screen-hosting.png',
       '/assets/screen-java.png'
     ];
 
@@ -99,11 +100,11 @@ async function run() {
     const releasesRes = await fetch(`${baseUrl}/data/releases.json`);
     const releases = await releasesRes.json();
     const latest = releases[0];
-    assert(latest && latest.tag === 'v1.4.1', 'Brak najnowszego wydania v1.4.1 w releases.json');
-    assert(latest.assets.installer.size > 50_000_000, 'Brak rzeczywistego rozmiaru instalatora 1.4.1 w releases.json');
-    assert(latest.assets.portable.size > 50_000_000, 'Brak rzeczywistego rozmiaru portable 1.4.1 w releases.json');
+    assert(latest && latest.tag === 'v1.5.0', 'Brak najnowszego wydania v1.5.0 w releases.json');
+    assert(latest.assets.installer.size > 50_000_000, 'Brak rzeczywistego rozmiaru instalatora 1.5.0 w releases.json');
+    assert(latest.assets.portable.size > 50_000_000, 'Brak rzeczywistego rozmiaru portable 1.5.0 w releases.json');
 
-    for (const fileName of ['Peak-Launcher-Setup-1.4.1.exe', 'Peak-Launcher-Portable-1.4.1.exe']) {
+    for (const fileName of ['Peak-Launcher-Setup-1.5.0.exe', 'Peak-Launcher-Portable-1.5.0.exe']) {
       const res = await fetch(`${baseUrl}/dist/${fileName}`, { method: 'HEAD' });
       assert.strictEqual(res.status, 200, `HEAD /dist/${fileName} zwrócił ${res.status}`);
       const len = Number(res.headers.get('content-length'));

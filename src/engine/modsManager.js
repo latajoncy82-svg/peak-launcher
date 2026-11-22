@@ -47,6 +47,59 @@ const PEAK_PACKS = {
   }
 };
 
+const PEAK_SERVER_PACKS = {
+  server_perf: {
+    id: 'server_perf',
+    title: 'Peak Serwer Performance',
+    items: [
+      { id: 'P7dR8mSH', label: 'Fabric API' },
+      { id: 'gvQqBUqZ', label: 'Lithium' },
+      { id: 'uXXizFIs', label: 'FerriteCore' },
+      { id: 'fQEb0iXm', label: 'Krypton' },
+      { id: 'l6YH9Als', label: 'spark' }
+    ]
+  },
+  server_tools: {
+    id: 'server_tools',
+    title: 'Peak Serwer Admin & Świat',
+    items: [
+      { id: 'P7dR8mSH', label: 'Fabric API' },
+      { id: 'fALzjamp', label: 'Chunky' },
+      { id: 'l6YH9Als', label: 'spark' },
+      { id: '9eGKb6K1', label: 'Simple Voice Chat' }
+    ]
+  }
+};
+
+const CLIENT_ONLY_MOD_IDS = new Set([
+  'sodium',
+  'iris',
+  'modmenu',
+  'entityculling',
+  'immediatelyfast',
+  'zoomify',
+  'mousetweaks',
+  'xaerominimap',
+  'xaeroworldmap',
+  'appleskin',
+  'lambdynlights',
+  'continuity',
+  'rees-sodium-options',
+  'sodium-extra'
+]);
+
+function isKnownClientOnlyMod(item, metaEntry) {
+  if (metaEntry && metaEntry.serverSide === 'unsupported') return true;
+  const modId = String(item?.modId || '').toLowerCase();
+  const slug = String(metaEntry?.slug || '').toLowerCase();
+  const name = String(item?.baseFileName || item?.name || '').toLowerCase();
+  if (CLIENT_ONLY_MOD_IDS.has(modId) || CLIENT_ONLY_MOD_IDS.has(slug)) return true;
+  for (const token of CLIENT_ONLY_MOD_IDS) {
+    if (name.startsWith(token)) return true;
+  }
+  return false;
+}
+
 function normalizeProjectType(projectType) {
   if (projectType === 'shader' || projectType === 'resourcepack') return projectType;
   return 'mod';
@@ -75,10 +128,9 @@ function getMetadataFilePath(dataDir, profileId) {
   return path.join(instanceDir, '.peak-mods.json');
 }
 
-function readModsMetadata(dataDir, profileId) {
-  const metaPath = getMetadataFilePath(dataDir, profileId);
+function readMetadataFile(metaPath) {
   try {
-    if (fs.existsSync(metaPath)) {
+    if (metaPath && fs.existsSync(metaPath)) {
       return JSON.parse(fs.readFileSync(metaPath, 'utf8'));
     }
   } catch {
@@ -87,18 +139,30 @@ function readModsMetadata(dataDir, profileId) {
   return {};
 }
 
-function writeModsMetadata(dataDir, profileId, metadata) {
-  const metaPath = getMetadataFilePath(dataDir, profileId);
+function writeMetadataFile(metaPath, metadata) {
+  ensureDir(path.dirname(metaPath));
   const tmpPath = `${metaPath}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(metadata, null, 2), 'utf8');
   fs.renameSync(tmpPath, metaPath);
 }
 
-function updateModsMetadata(dataDir, profileId, mutator) {
-  const current = readModsMetadata(dataDir, profileId);
+function updateMetadataFile(metaPath, mutator) {
+  const current = readMetadataFile(metaPath);
   const next = mutator(current) || current;
-  writeModsMetadata(dataDir, profileId, next);
+  writeMetadataFile(metaPath, next);
   return next;
+}
+
+function readModsMetadata(dataDir, profileId) {
+  return readMetadataFile(getMetadataFilePath(dataDir, profileId));
+}
+
+function writeModsMetadata(dataDir, profileId, metadata) {
+  writeMetadataFile(getMetadataFilePath(dataDir, profileId), metadata);
+}
+
+function updateModsMetadata(dataDir, profileId, mutator) {
+  return updateMetadataFile(getMetadataFilePath(dataDir, profileId), mutator);
 }
 
 function normalizeJarKey(fileName) {
@@ -183,10 +247,10 @@ function isSupportedContentFile(fileName, projectType) {
   );
 }
 
-function listProfileContent(dataDir, profileId, projectType = 'mod') {
+function listContentInDir(contentDir, metaPath, projectType = 'mod') {
   const type = normalizeProjectType(projectType);
-  const contentDir = getContentDir(dataDir, profileId, type);
-  const sidecar = readModsMetadata(dataDir, profileId);
+  ensureDir(contentDir);
+  const sidecar = readMetadataFile(metaPath);
   const entries = fs.readdirSync(contentDir, { withFileTypes: true });
   const items = [];
 
@@ -217,7 +281,9 @@ function listProfileContent(dataDir, profileId, projectType = 'mod') {
       description: jarInfo.description || modrinthInfo?.description || '',
       authors: jarInfo.authors,
       projectId: modrinthInfo?.projectId || null,
-      iconUrl: modrinthInfo?.iconUrl || null
+      iconUrl: modrinthInfo?.iconUrl || null,
+      clientSide: modrinthInfo?.clientSide || '',
+      serverSide: modrinthInfo?.serverSide || ''
     });
   }
 
@@ -225,13 +291,26 @@ function listProfileContent(dataDir, profileId, projectType = 'mod') {
   return items;
 }
 
+function listModsInDirectory(modsDir, metaPath) {
+  return listContentInDir(modsDir, metaPath, 'mod');
+}
+
+function listProfileContent(dataDir, profileId, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  return listContentInDir(
+    getContentDir(dataDir, profileId, type),
+    getMetadataFilePath(dataDir, profileId),
+    type
+  );
+}
+
 function listProfileMods(dataDir, profileId) {
   return listProfileContent(dataDir, profileId, 'mod');
 }
 
-function toggleContent(dataDir, profileId, fileName, enabled, projectType = 'mod') {
+function toggleContentInDir(contentDir, metaPath, fileName, enabled, projectType = 'mod') {
   const type = normalizeProjectType(projectType);
-  const contentDir = getContentDir(dataDir, profileId, type);
+  ensureDir(contentDir);
   const safeName = path.basename(fileName);
   const currentPath = path.join(contentDir, safeName);
   if (!fs.existsSync(currentPath)) {
@@ -252,36 +331,65 @@ function toggleContent(dataDir, profileId, fileName, enabled, projectType = 'mod
     fs.renameSync(currentPath, targetPath);
   }
 
-  return listProfileContent(dataDir, profileId, type);
+  return listContentInDir(contentDir, metaPath, type);
+}
+
+function toggleModInDirectory(modsDir, metaPath, fileName, enabled) {
+  return toggleContentInDir(modsDir, metaPath, fileName, enabled, 'mod');
+}
+
+function toggleContent(dataDir, profileId, fileName, enabled, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  return toggleContentInDir(
+    getContentDir(dataDir, profileId, type),
+    getMetadataFilePath(dataDir, profileId),
+    fileName,
+    enabled,
+    type
+  );
 }
 
 function toggleMod(dataDir, profileId, fileName, enabled) {
   return toggleContent(dataDir, profileId, fileName, enabled, 'mod');
 }
 
-function deleteContent(dataDir, profileId, fileName, projectType = 'mod') {
+function deleteContentInDir(contentDir, metaPath, fileName, projectType = 'mod') {
   const type = normalizeProjectType(projectType);
-  const contentDir = getContentDir(dataDir, profileId, type);
+  ensureDir(contentDir);
   const safeName = path.basename(fileName);
   const targetPath = path.join(contentDir, safeName);
   if (fs.existsSync(targetPath)) {
     fs.unlinkSync(targetPath);
   }
   const key = normalizeJarKey(safeName);
-  updateModsMetadata(dataDir, profileId, (sidecar) => {
+  updateMetadataFile(metaPath, (sidecar) => {
     if (sidecar[key]) delete sidecar[key];
     return sidecar;
   });
-  return listProfileContent(dataDir, profileId, type);
+  return listContentInDir(contentDir, metaPath, type);
+}
+
+function deleteModInDirectory(modsDir, metaPath, fileName) {
+  return deleteContentInDir(modsDir, metaPath, fileName, 'mod');
+}
+
+function deleteContent(dataDir, profileId, fileName, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  return deleteContentInDir(
+    getContentDir(dataDir, profileId, type),
+    getMetadataFilePath(dataDir, profileId),
+    fileName,
+    type
+  );
 }
 
 function deleteMod(dataDir, profileId, fileName) {
   return deleteContent(dataDir, profileId, fileName, 'mod');
 }
 
-function importLocalContent(dataDir, profileId, filePaths, projectType = 'mod') {
+function importLocalContentToDir(contentDir, metaPath, filePaths, projectType = 'mod') {
   const type = normalizeProjectType(projectType);
-  const contentDir = getContentDir(dataDir, profileId, type);
+  ensureDir(contentDir);
   const imported = [];
 
   for (const srcPath of filePaths || []) {
@@ -299,8 +407,22 @@ function importLocalContent(dataDir, profileId, filePaths, projectType = 'mod') 
 
   return {
     imported,
-    mods: listProfileContent(dataDir, profileId, type)
+    mods: listContentInDir(contentDir, metaPath, type)
   };
+}
+
+function importLocalModsToDirectory(modsDir, metaPath, filePaths) {
+  return importLocalContentToDir(modsDir, metaPath, filePaths, 'mod');
+}
+
+function importLocalContent(dataDir, profileId, filePaths, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  return importLocalContentToDir(
+    getContentDir(dataDir, profileId, type),
+    getMetadataFilePath(dataDir, profileId),
+    filePaths,
+    type
+  );
 }
 
 function importLocalMods(dataDir, profileId, filePaths) {
@@ -313,11 +435,14 @@ function normalizeSortIndex(sort, query) {
   return query && String(query).trim() ? 'relevance' : 'downloads';
 }
 
-function buildSearchFacets({ projectType, mcVersion, category, includeVersion }) {
+function buildSearchFacets({ projectType, mcVersion, category, includeVersion, serverCompatible = false }) {
   const type = normalizeProjectType(projectType);
   const facets = [[`project_type:${type}`]];
   if (type === 'mod') {
     facets.push(['categories:fabric']);
+    if (serverCompatible) {
+      facets.push(['server_side:required', 'server_side:optional']);
+    }
   }
   if (includeVersion && mcVersion) {
     facets.push([`versions:${mcVersion}`]);
@@ -340,7 +465,9 @@ function mapSearchHit(hit, projectType) {
     downloads: hit.downloads || 0,
     follows: hit.follows || 0,
     categories: hit.categories || [],
-    versions: hit.versions || []
+    versions: hit.versions || [],
+    clientSide: hit.client_side || '',
+    serverSide: hit.server_side || ''
   };
 }
 
@@ -351,7 +478,8 @@ async function searchModrinth({
   projectType = 'mod',
   offset = 0,
   limit = 24,
-  sort = 'auto'
+  sort = 'auto',
+  serverCompatible = false
 } = {}) {
   const type = normalizeProjectType(projectType);
   const index = normalizeSortIndex(sort, query);
@@ -362,7 +490,8 @@ async function searchModrinth({
       projectType: type,
       mcVersion,
       category,
-      includeVersion: withVersion
+      includeVersion: withVersion,
+      serverCompatible: Boolean(serverCompatible)
     });
     const params = new URLSearchParams({
       limit: String(limit),
@@ -476,8 +605,8 @@ async function getModrinthProjectDetails(projectId, mcVersion = '', projectType 
   };
 }
 
-function removeDuplicateInstalledItems({ dataDir, profileId, projectType, projectId, newFileName, newModId }) {
-  const existing = listProfileContent(dataDir, profileId, projectType);
+function removeDuplicateInstalledItemsInDir({ contentDir, metaPath, projectType, projectId, newFileName, newModId }) {
+  const existing = listContentInDir(contentDir, metaPath, projectType);
   const newKey = normalizeJarKey(newFileName);
 
   for (const item of existing) {
@@ -490,7 +619,7 @@ function removeDuplicateInstalledItems({ dataDir, profileId, projectType, projec
       } catch {
         // Ignore deletion failure
       }
-      updateModsMetadata(dataDir, profileId, (sidecar) => {
+      updateMetadataFile(metaPath, (sidecar) => {
         if (sidecar[item.baseFileName]) delete sidecar[item.baseFileName];
         return sidecar;
       });
@@ -498,13 +627,13 @@ function removeDuplicateInstalledItems({ dataDir, profileId, projectType, projec
   }
 }
 
-async function installModrinthContent({
+async function installModrinthContentToDir({
   projectId,
   versionId = null,
   projectType = 'mod',
   mcVersion,
-  dataDir,
-  profileId,
+  contentDir,
+  metaPath,
   projectMeta = null,
   onProgress = null,
   visited = new Set()
@@ -516,9 +645,9 @@ async function installModrinthContent({
   visited.add(projectId);
 
   const type = normalizeProjectType(projectType);
-  const contentDir = getContentDir(dataDir, profileId, type);
+  ensureDir(contentDir);
 
-  let meta = projectMeta;
+  let meta = projectMeta ? { ...projectMeta } : null;
   if (!meta) {
     try {
       const p = await fetchJson(`${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}`);
@@ -527,10 +656,21 @@ async function installModrinthContent({
         slug: p.slug,
         title: p.title,
         description: p.description,
-        iconUrl: p.icon_url || ''
+        iconUrl: p.icon_url || '',
+        clientSide: p.client_side || '',
+        serverSide: p.server_side || ''
       };
     } catch {
-      meta = { projectId, title: projectId, description: '', iconUrl: '' };
+      meta = { projectId, title: projectId, description: '', iconUrl: '', clientSide: '', serverSide: '' };
+    }
+  } else if (meta.clientSide === undefined || meta.serverSide === undefined) {
+    try {
+      const p = await fetchJson(`${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}`);
+      meta.clientSide = p.client_side || '';
+      meta.serverSide = p.server_side || '';
+      meta.slug = meta.slug || p.slug || '';
+    } catch {
+      // Non-fatal
     }
   }
 
@@ -538,7 +678,7 @@ async function installModrinthContent({
   if (versionId) {
     chosenVersion = await fetchJson(`${MODRINTH_API_BASE}/version/${encodeURIComponent(versionId)}`);
   } else {
-    const existingItems = listProfileContent(dataDir, profileId, type);
+    const existingItems = listContentInDir(contentDir, metaPath, type);
     if (existingItems.some((m) => m.projectId === projectId)) {
       return { installed: [], dependenciesInstalled: [], alreadyInstalled: true };
     }
@@ -590,16 +730,16 @@ async function installModrinthContent({
   });
 
   const downloadedInfo = readModMetadataFromJar(destPath);
-  removeDuplicateInstalledItems({
-    dataDir,
-    profileId,
+  removeDuplicateInstalledItemsInDir({
+    contentDir,
+    metaPath,
     projectType: type,
     projectId,
     newFileName: safeFilename,
     newModId: downloadedInfo.modId
   });
 
-  updateModsMetadata(dataDir, profileId, (sidecar) => {
+  updateMetadataFile(metaPath, (sidecar) => {
     sidecar[normalizeJarKey(safeFilename)] = {
       projectId,
       projectType: type,
@@ -607,6 +747,8 @@ async function installModrinthContent({
       title: meta.title || downloadedInfo.name || safeFilename,
       description: meta.description || downloadedInfo.description || '',
       iconUrl: meta.iconUrl || '',
+      clientSide: meta.clientSide || '',
+      serverSide: meta.serverSide || '',
       versionId: chosenVersion.id,
       versionNumber: chosenVersion.version_number || ''
     };
@@ -634,12 +776,12 @@ async function installModrinthContent({
       if (!depProjectId || visited.has(depProjectId)) continue;
 
       try {
-        const subRes = await installModrinthContent({
+        const subRes = await installModrinthContentToDir({
           projectId: depProjectId,
           projectType: 'mod',
           mcVersion,
-          dataDir,
-          profileId,
+          contentDir,
+          metaPath,
           onProgress,
           visited
         });
@@ -656,12 +798,59 @@ async function installModrinthContent({
   return { installed, dependenciesInstalled };
 }
 
+async function installModrinthModToDirectory({
+  projectId,
+  versionId = null,
+  mcVersion,
+  modsDir,
+  metaPath,
+  projectMeta = null,
+  onProgress = null,
+  visited = new Set()
+}) {
+  return installModrinthContentToDir({
+    projectId,
+    versionId,
+    projectType: 'mod',
+    mcVersion,
+    contentDir: modsDir,
+    metaPath,
+    projectMeta,
+    onProgress,
+    visited
+  });
+}
+
+async function installModrinthContent({
+  projectId,
+  versionId = null,
+  projectType = 'mod',
+  mcVersion,
+  dataDir,
+  profileId,
+  projectMeta = null,
+  onProgress = null,
+  visited = new Set()
+}) {
+  const type = normalizeProjectType(projectType);
+  return installModrinthContentToDir({
+    projectId,
+    versionId,
+    projectType: type,
+    mcVersion,
+    contentDir: getContentDir(dataDir, profileId, type),
+    metaPath: getMetadataFilePath(dataDir, profileId),
+    projectMeta,
+    onProgress,
+    visited
+  });
+}
+
 async function installModrinthMod(params) {
   return installModrinthContent({ ...params, projectType: 'mod' });
 }
 
-async function installCuratedPack({ packId = 'fps', mcVersion, dataDir, profileId, onProgress = null }) {
-  const pack = PEAK_PACKS[packId] || PEAK_PACKS.fps;
+async function installPackToDir({ pack, mcVersion, modsDir, metaPath, onProgress = null }) {
   const visited = new Set();
   const installed = [];
   const skipped = [];
@@ -676,12 +865,12 @@ async function installCuratedPack({ packId = 'fps', mcVersion, dataDir, profileI
       });
     }
     try {
-      const res = await installModrinthContent({
+      const res = await installModrinthContentToDir({
         projectId: item.id,
         projectType: 'mod',
         mcVersion,
-        dataDir,
-        profileId,
+        contentDir: modsDir,
+        metaPath,
         onProgress,
         visited
       });
@@ -697,12 +886,95 @@ async function installCuratedPack({ packId = 'fps', mcVersion, dataDir, profileI
     packTitle: pack.title,
     installed,
     skipped,
-    mods: listProfileMods(dataDir, profileId)
+    mods: listModsInDirectory(modsDir, metaPath)
   };
+}
+
+async function installServerPackToDirectory({ packId = 'server_perf', mcVersion, modsDir, metaPath, onProgress = null }) {
+  const pack = PEAK_SERVER_PACKS[packId] || PEAK_SERVER_PACKS.server_perf;
+  return installPackToDir({ pack, mcVersion, modsDir, metaPath, onProgress });
+}
+
+async function installCuratedPack({ packId = 'fps', mcVersion, dataDir, profileId, onProgress = null }) {
+  const pack = PEAK_PACKS[packId] || PEAK_PACKS.fps;
+  return installPackToDir({
+    pack,
+    mcVersion,
+    modsDir: getContentDir(dataDir, profileId, 'mod'),
+    metaPath: getMetadataFilePath(dataDir, profileId),
+    onProgress
+  });
 }
 
 async function installPeakFpsPack(params) {
   return installCuratedPack({ ...params, packId: 'fps' });
+}
+
+function copyProfileModsToServerDir({ dataDir, profileId, serverModsDir, serverMetaPath }) {
+  const profileItems = listProfileMods(dataDir, profileId);
+  const profileMeta = readModsMetadata(dataDir, profileId);
+  ensureDir(serverModsDir);
+
+  const copied = [];
+  const skippedClientOnly = [];
+
+  for (const item of profileItems) {
+    if (!item.enabled) continue;
+    const metaEntry = profileMeta[item.baseFileName] || null;
+    if (isKnownClientOnlyMod(item, metaEntry)) {
+      skippedClientOnly.push(item.name || item.baseFileName);
+      continue;
+    }
+    const destPath = path.join(serverModsDir, item.baseFileName);
+    fs.copyFileSync(item.filePath, destPath);
+    if (metaEntry) {
+      updateMetadataFile(serverMetaPath, (sidecar) => {
+        sidecar[item.baseFileName] = metaEntry;
+        return sidecar;
+      });
+    }
+    copied.push(item.name || item.baseFileName);
+  }
+
+  return {
+    copied,
+    skippedClientOnly,
+    mods: listModsInDirectory(serverModsDir, serverMetaPath)
+  };
+}
+
+function syncServerModsToProfile({ dataDir, serverModsDir, serverMetaPath, profileId }) {
+  const serverItems = listModsInDirectory(serverModsDir, serverMetaPath);
+  const serverMeta = readMetadataFile(serverMetaPath);
+  const profileModsDir = getContentDir(dataDir, profileId, 'mod');
+  ensureDir(profileModsDir);
+
+  const copied = [];
+  const skippedServerOnly = [];
+
+  for (const item of serverItems) {
+    if (!item.enabled) continue;
+    const metaEntry = serverMeta[item.baseFileName] || null;
+    if (metaEntry && metaEntry.clientSide === 'unsupported') {
+      skippedServerOnly.push(item.name || item.baseFileName);
+      continue;
+    }
+    const destPath = path.join(profileModsDir, item.baseFileName);
+    fs.copyFileSync(item.filePath, destPath);
+    if (metaEntry) {
+      updateModsMetadata(dataDir, profileId, (sidecar) => {
+        sidecar[item.baseFileName] = metaEntry;
+        return sidecar;
+      });
+    }
+    copied.push(item.name || item.baseFileName);
+  }
+
+  return {
+    copied,
+    skippedServerOnly,
+    mods: listProfileMods(dataDir, profileId)
+  };
 }
 
 async function checkAndUpdateProfileMods({
@@ -785,21 +1057,32 @@ module.exports = {
   MODRINTH_API_BASE,
   PEAK_FPS_PACK_IDS,
   PEAK_PACKS,
+  PEAK_SERVER_PACKS,
+  CLIENT_ONLY_MOD_IDS,
   getContentDir,
   getProfileModsDir,
+  readMetadataFile,
+  listModsInDirectory,
   listProfileContent,
   listProfileMods,
+  toggleModInDirectory,
   toggleContent,
   toggleMod,
+  deleteModInDirectory,
   deleteContent,
   deleteMod,
+  importLocalModsToDirectory,
   importLocalContent,
   importLocalMods,
   searchModrinth,
   getModrinthProjectDetails,
+  installModrinthModToDirectory,
   installModrinthContent,
   installModrinthMod,
+  installServerPackToDirectory,
   installCuratedPack,
   installPeakFpsPack,
+  copyProfileModsToServerDir,
+  syncServerModsToProfile,
   checkAndUpdateProfileMods
 };

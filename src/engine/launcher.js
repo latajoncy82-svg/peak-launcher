@@ -194,6 +194,17 @@ function parseUserJvmArgs(rawArgs) {
   );
 }
 
+function supportsQuickPlay(mcVersion) {
+  const s = String(mcVersion || '').trim();
+  const yr = s.match(/^(\d+)\./);
+  if (yr && Number(yr[1]) >= 20) return true;
+  const snap = s.match(/^(\d{2})w/);
+  if (snap && Number(snap[1]) >= 23) return true;
+  const minor = s.match(/^1\.(\d+)/);
+  if (minor && Number(minor[1]) >= 20) return true;
+  return false;
+}
+
 function buildLaunchSpec({
   profile,
   account,
@@ -203,7 +214,8 @@ function buildLaunchSpec({
   parentJson,
   childJson = null,
   assetIndexJson = null,
-  skinAgent = null
+  skinAgent = null,
+  quickPlayServer = null
 }) {
   const paths = getPaths(dataDir);
   const profileDirs = getProfileDirs(dataDir, profile.id);
@@ -279,7 +291,7 @@ function buildLaunchSpec({
     classpath_separator: path.delimiter,
     classpath,
     launcher_name: 'PeakLauncher',
-    launcher_version: '1.4.1',
+    launcher_version: '1.5.0',
     resolution_width: String(settings.width || 1280),
     resolution_height: String(settings.height || 720)
   };
@@ -302,7 +314,7 @@ function buildLaunchSpec({
     jvmArgs = [
       `-Djava.library.path=${nativesDir}`,
       `-Dminecraft.launcher.brand=PeakLauncher`,
-      `-Dminecraft.launcher.version=1.4.1`,
+      `-Dminecraft.launcher.version=1.5.0`,
       '-cp',
       classpath
     ];
@@ -320,6 +332,18 @@ function buildLaunchSpec({
     gameArgs = tokens.map((tok) => applyPlaceholders(tok, replacements));
     if (customResolution) {
       gameArgs.push('--width', replacements.resolution_width, '--height', replacements.resolution_height);
+    }
+  }
+
+  if (quickPlayServer && String(quickPlayServer).trim()) {
+    const target = String(quickPlayServer).trim();
+    if (supportsQuickPlay(mcVersion)) {
+      gameArgs.push('--quickPlayMultiplayer', target);
+    } else {
+      const colonIdx = target.lastIndexOf(':');
+      const host = colonIdx > 0 ? target.slice(0, colonIdx) : target;
+      const port = colonIdx > 0 ? target.slice(colonIdx + 1) : '25565';
+      gameArgs.push('--server', host, '--port', port);
     }
   }
 
@@ -466,6 +490,7 @@ async function prepareProfileFiles({
   allAccounts = [],
   settings = {},
   dataDir,
+  quickPlayServer = null,
   onProgress = null,
   onLog = null
 }) {
@@ -616,7 +641,8 @@ async function prepareProfileFiles({
     parentJson,
     childJson,
     assetIndexJson,
-    skinAgent
+    skinAgent,
+    quickPlayServer
   });
 
   emitProgress('ready', 100, 'Wszystkie pliki gotowe!');
@@ -629,6 +655,7 @@ async function launchProfile({
   allAccounts = [],
   settings,
   dataDir,
+  quickPlayServer = null,
   onProgress = null,
   onLog = null,
   onStatus = null
@@ -658,6 +685,7 @@ async function launchProfile({
       allAccounts,
       settings,
       dataDir,
+      quickPlayServer,
       onProgress,
       onLog
     });
