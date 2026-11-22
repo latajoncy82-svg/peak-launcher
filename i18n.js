@@ -34,6 +34,7 @@
       'preview.dark': 'Nocny Szczyt',
       'preview.light': 'Lodowcowy Dzień',
       'preview.mods': 'Mody',
+      'preview.skins': 'Skiny',
       'preview.java': 'Java i Fabric',
       'features.title': 'Prosty. Szybki. Gotowy na mody.',
       'features.subtitle': 'Zero zbędnych paneli — cała konfiguracja środowiska dzieje się w tle.',
@@ -88,6 +89,7 @@
       'preview.dark': 'Night Summit',
       'preview.light': 'Glacier Day',
       'preview.mods': 'Mods',
+      'preview.skins': 'Skins',
       'preview.java': 'Java & Fabric',
       'features.title': 'Simple. Fast. Ready for mods.',
       'features.subtitle': 'Zero clutter — all environment setup happens automatically in the background.',
@@ -142,6 +144,7 @@
       'preview.dark': 'Nachtgipfel',
       'preview.light': 'Gletschertag',
       'preview.mods': 'Mods',
+      'preview.skins': 'Skins',
       'preview.java': 'Java & Fabric',
       'features.title': 'Schlicht. Schnell. Bereit für Mods.',
       'features.subtitle': 'Kein Ballast — die gesamte Einrichtung läuft im Hintergrund.',
@@ -196,6 +199,7 @@
       'preview.dark': 'Cumbre Nocturna',
       'preview.light': 'Día Glaciar',
       'preview.mods': 'Mods',
+      'preview.skins': 'Skins',
       'preview.java': 'Java y Fabric',
       'features.title': 'Simple. Rápido. Listo para mods.',
       'features.subtitle': 'Sin paneles innecesarios — todo el entorno se configura en segundo plano.',
@@ -250,6 +254,7 @@
       'preview.dark': 'Sommet Nocturne',
       'preview.light': 'Jour Glaciaire',
       'preview.mods': 'Mods',
+      'preview.skins': 'Skins',
       'preview.java': 'Java & Fabric',
       'features.title': 'Simple. Rapide. Prêt pour les mods.',
       'features.subtitle': 'Zéro encombrement — toute la configuration s’effectue en arrière-plan.',
@@ -304,6 +309,7 @@
       'preview.dark': 'Нічна Вершина',
       'preview.light': 'Льодовиковий День',
       'preview.mods': 'Моди',
+      'preview.skins': 'Скіни',
       'preview.java': 'Java і Fabric',
       'features.title': 'Простий. Швидкий. Готовий до модів.',
       'features.subtitle': 'Жодних зайвих панелей — усе налаштування середовища відбувається у фоні.',
@@ -387,7 +393,7 @@
     return text;
   }
 
-  function applyDomTranslations(root = document, vars = { ver: '1.3', tag: 'v1.3.2' }) {
+  function applyDomTranslations(root = document, vars = { ver: '1.4', tag: 'v1.4.0' }) {
     document.title = t('meta.title', vars);
     const metaDesc = root.querySelector('meta[name="description"]');
     if (metaDesc) metaDesc.setAttribute('content', t('meta.description', vars));
