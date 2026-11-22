@@ -30,6 +30,7 @@
     <nav class="topbar-nav" aria-label="Nawigacja główna">
       <button class="top-nav-item active" type="button" data-view="play" data-i18n="nav_play">Graj</button>
       <button class="top-nav-item" type="button" data-view="mods" data-i18n="nav_mods">Mody</button>
+      <button class="top-nav-item" type="button" data-view="skins" data-i18n="nav_skins">Skiny</button>
       <button class="top-nav-item" type="button" data-view="versions" data-i18n="nav_versions">Wersje</button>
       <button class="top-nav-item" type="button" data-view="java">
         <span data-i18n="nav_java">Java i Fabric</span>
@@ -54,8 +55,9 @@
             <span id="popover-accounts-count" class="quiet-pill">1</span>
           </div>
           <div id="popover-accounts-list" class="account-popover-list"></div>
-          <div class="account-popover-footer">
+          <div class="account-popover-footer triple">
             <button id="btn-popover-add-account" class="popover-action-btn primary" type="button" data-i18n="btn_add_account">+ Dodaj konto</button>
+            <button id="btn-popover-skin" class="popover-action-btn" type="button" data-i18n="btn_skin_short">Skin</button>
             <button id="btn-popover-manage-accounts" class="popover-action-btn" type="button" data-i18n="btn_manage_accounts">Zarządzaj kontami</button>
           </div>
         </div>
@@ -253,6 +255,94 @@
           </div>
 
           <div id="installed-mods-list" class="installed-mods-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 2B: SKIN STUDIO OVERLAY -->
+    <section id="view-skins" class="view view-overlay">
+      <div class="overlay-container">
+        <div class="overlay-header">
+          <div>
+            <h1 data-i18n="skins_title">Studio Skinów</h1>
+            <p data-i18n="skins_sub">Wgraj własny plik .png, pobierz z nicku lub wybierz gotowy skin 3D widoczny w grze.</p>
+          </div>
+          <div class="overlay-header-actions">
+            <select id="skins-account-select"></select>
+          </div>
+        </div>
+
+        <div class="skins-workspace">
+          <!-- Left: 3D Interactive Stage -->
+          <div class="skin-stage-card">
+            <div class="skin-stage-top">
+              <span id="skin-badge-source" class="quiet-pill" data-i18n="skin_no_custom">Domyślny</span>
+              <span id="skin-badge-model" class="quiet-pill">Classic 4px</span>
+            </div>
+
+            <div class="skin-canvas-wrap">
+              <canvas id="skin-3d-canvas" aria-label="Podgląd 3D skina"></canvas>
+              <div id="skin-empty-hint" class="skin-empty-hint hidden" data-i18n="skin_no_custom">
+                Domyślny (bez nadpisania)
+              </div>
+            </div>
+
+            <div class="skin-stage-controls">
+              <button id="btn-skin-rotate" class="filter-pill active" type="button" data-i18n="skin_stage_rotate">Obrót</button>
+              <button id="btn-skin-walk" class="filter-pill active" type="button" data-i18n="skin_stage_walk">Chód</button>
+              <button id="btn-skin-outer" class="filter-pill active" type="button" data-i18n="skin_stage_layer">2. warstwa</button>
+              <button id="btn-skin-cam-reset" class="btn-outline" type="button" data-i18n="skin_stage_reset">Reset widoku</button>
+            </div>
+          </div>
+
+          <!-- Right: Upload, Fetch, Model & Presets/Library -->
+          <div class="skin-controls-col">
+            <div id="skin-dropzone" class="skin-dropzone">
+              <div>
+                <strong data-i18n="skin_upload_title">Przeciągnij plik skina .png tutaj</strong>
+                <p data-i18n="skin_upload_sub">Format 64×64, 64×32 lub HD (maks. 4 MB)</p>
+              </div>
+              <button id="btn-pick-skin" class="btn-accent" type="button" data-i18n="btn_choose_png">Wybierz plik .png</button>
+            </div>
+
+            <section class="settings-card">
+              <div class="settings-card-head">
+                <h3 data-i18n="skin_fetch_title">Pobierz z nicku Minecraft</h3>
+              </div>
+              <div class="skin-fetch-row">
+                <input id="skin-fetch-input" type="text" maxlength="16" data-i18n-placeholder="skin_fetch_ph" placeholder="Wpisz nick gracza, np. Notch..." />
+                <button id="btn-fetch-skin" class="btn-outline" type="button" data-i18n="btn_fetch_skin">Pobierz skin</button>
+              </div>
+            </section>
+
+            <section class="settings-card">
+              <div class="settings-card-head">
+                <h3 data-i18n="skin_model_title">Typ sylwetki i akcje</h3>
+                <button id="btn-reset-skin" class="btn-danger-sm" type="button" data-i18n="btn_reset_skin">Usuń skin</button>
+              </div>
+              <div class="skin-model-switch">
+                <button id="skin-model-classic" class="skin-model-btn active" type="button" data-model="classic" data-i18n="skin_model_classic">Klasyczny (Steve · 4px)</button>
+                <button id="skin-model-slim" class="skin-model-btn" type="button" data-model="slim" data-i18n="skin_model_slim">Smukły (Alex · 3px)</button>
+              </div>
+            </section>
+
+            <section class="settings-card">
+              <div class="settings-card-head">
+                <h3 data-i18n="skin_presets_title">Gotowe skiny Peak (Offline)</h3>
+              </div>
+              <div id="skin-presets-grid" class="skins-grid"></div>
+            </section>
+
+            <section id="skin-library-section" class="settings-card">
+              <div class="settings-card-head">
+                <h3 data-i18n="skin_library_title">Twoja biblioteka skinów</h3>
+              </div>
+              <div id="skin-library-grid" class="skins-grid"></div>
+              <p id="skin-library-empty" class="field-hint" data-i18n="skin_library_empty">
+                Wgrane i pobrane skiny pojawią się tutaj do szybkiego ponownego użycia.
+              </p>
+            </section>
+          </div>
         </div>
       </div>
     </section>
@@ -862,6 +952,7 @@
 
   <script src="./i18n.js"></script>
   <script src="./fx.js"></script>
+  <script src="./skin3d.js"></script>
   <script src="./app.js"></script>
 </body>
 </html>

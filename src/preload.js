@@ -44,6 +44,16 @@ contextBridge.exposeInMainWorld('peakAPI', {
   selectAccount: (accountId) => invoke('account:select', accountId),
   deleteAccount: (accountId) => invoke('account:delete', accountId),
 
+  // Skins Studio
+  listSkins: () => invoke('skins:list'),
+  pickAndUploadSkin: (payload) => invoke('skins:pickAndUpload', payload),
+  uploadSkinPath: (payload) => invoke('skins:uploadPath', payload),
+  fetchSkinByNick: (payload) => invoke('skins:fetchByNick', payload),
+  applySkinPreset: (payload) => invoke('skins:applyPreset', payload),
+  applySkinLibrary: (payload) => invoke('skins:applyLibrary', payload),
+  setSkinModel: (payload) => invoke('skins:setModel', payload),
+  resetAccountSkin: (payload) => invoke('skins:reset', payload),
+
   // Profiles
   createProfile: (payload) => invoke('profile:create', payload),
   updateProfile: (profileId, patch) => invoke('profile:update', profileId, patch),

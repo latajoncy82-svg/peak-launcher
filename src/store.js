@@ -272,6 +272,24 @@ class Store {
     return this.getState();
   }
 
+  updateAccountSkin(accountId, { skinFile, skinModel, skinSource } = {}) {
+    const acc = this.data.accounts.find((a) => a.id === accountId);
+    if (!acc) {
+      throw new Error('Nie znaleziono wybranego konta.');
+    }
+    if (skinFile !== undefined) {
+      acc.skinFile = skinFile || null;
+    }
+    if (skinModel !== undefined) {
+      acc.skinModel = skinModel === 'slim' ? 'slim' : 'classic';
+    }
+    if (skinSource !== undefined) {
+      acc.skinSource = skinSource || null;
+    }
+    this.save();
+    return acc;
+  }
+
   getActiveProfile() {
     return (
       this.data.profiles.find((p) => p.id === this.data.activeProfileId) ||

@@ -34,6 +34,10 @@
     editingProfileId: null,
     editingAccountId: null,
     activeModDetails: null,
+    skinCatalog: { presets: [], library: [] },
+    skinTargetAccountId: null,
+    skinViewer: null,
+    skinStageOptions: { autoRotate: true, walk: true, showOuterLayer: true },
     logs: [],
     javaDownloadingMajor: null
   };
@@ -159,9 +163,12 @@
     }
   }
 
-  function renderAvatarElement(container, username) {
+  function renderAvatarElement(container, username, skinDataUrl = null) {
     if (!container) return;
     const safeName = (username || 'PeakPlayer').trim() || 'PeakPlayer';
+    const token = `${safeName}|${skinDataUrl ? skinDataUrl.slice(-24) : ''}`;
+    container.dataset.avatarToken = token;
+
     const letter = safeName.slice(0, 1).toUpperCase();
     let hash = 0;
     for (let i = 0; i < safeName.length; i++) {
@@ -171,11 +178,28 @@
     container.style.background = `linear-gradient(135deg, hsl(${hue}, 68%, 45%), hsl(${(hue + 38) % 360}, 75%, 34%))`;
     container.textContent = letter;
 
+    if (skinDataUrl && window.PeakSkin3D) {
+      window.PeakSkin3D.extractHeadDataUrl(skinDataUrl)
+        .then((headUrl) => {
+          if (!headUrl || container.dataset.avatarToken !== token) return;
+          const img = new Image();
+          img.alt = safeName;
+          img.src = headUrl;
+          img.style.imageRendering = 'pixelated';
+          container.textContent = '';
+          container.appendChild(img);
+        })
+        .catch(() => {
+          // Keep monogram fallback on malformed image
+        });
+      return;
+    }
+
     if (/^[a-zA-Z0-9_]{3,16}$/.test(safeName)) {
       const img = new Image();
       img.alt = safeName;
       img.onload = () => {
-        if (img.naturalWidth >= 8) {
+        if (img.naturalWidth >= 8 && container.dataset.avatarToken === token) {
           container.textContent = '';
           container.appendChild(img);
         }
@@ -195,6 +219,9 @@
     });
     if (viewName === 'mods') {
       loadModsAndCatalog();
+    } else if (viewName === 'skins') {
+      loadSkinsCatalog();
+      requestAnimationFrame(() => state.skinViewer?.resize());
     } else if (viewName === 'java') {
       renderJavaAndFabricView();
     } else if (viewName === 'versions') {
@@ -208,7 +235,7 @@
     const account = getActiveAccount();
     if (!profile) return;
 
-    renderAvatarElement($('topbar-avatar'), account?.username);
+    renderAvatarElement($('topbar-avatar'), account?.username, account?.skinDataUrl);
     $('topbar-username').textContent = account?.username || 'PeakPlayer';
 
     $('hero-profile-name').textContent = profile.name;
@@ -983,14 +1010,18 @@
     const navAccCount = $('nav-accounts-count');
     if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
 
-    if ($('diag-version')) $('diag-version').textContent = 'v1.3.2';
+    if ($('diag-version')) $('diag-version').textContent = 'v1.4.0';
     if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
     if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
     if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
 
     const newAccInput = $('new-account-input');
     if ($('settings-new-acc-avatar') && (!newAccInput || !newAccInput.value.trim())) {
-      renderAvatarElement($('settings-new-acc-avatar'), getActiveAccount()?.username || 'PeakPlayer');
+      renderAvatarElement(
+        $('settings-new-acc-avatar'),
+        getActiveAccount()?.username || 'PeakPlayer',
+        getActiveAccount()?.skinDataUrl
+      );
     }
 
     const accList = $('settings-accounts-list');
@@ -1005,7 +1036,7 @@
 
       const av = document.createElement('span');
       av.className = 'account-avatar-md';
-      renderAvatarElement(av, acc.username);
+      renderAvatarElement(av, acc.username, acc.skinDataUrl);
 
       const meta = document.createElement('div');
       meta.className = 'account-manager-meta';
@@ -1124,7 +1155,7 @@
 
       const av = document.createElement('span');
       av.className = 'player-avatar-mini';
-      renderAvatarElement(av, acc.username);
+      renderAvatarElement(av, acc.username, acc.skinDataUrl);
 
       const meta = document.createElement('div');
       meta.className = 'account-popover-item-meta';
@@ -1173,13 +1204,17 @@
       input.value = accountToEdit.username;
       saveBtn.textContent = t('btn_save_changes');
       cancelBtn.classList.remove('hidden');
-      renderAvatarElement(previewAv, accountToEdit.username);
+      renderAvatarElement(previewAv, accountToEdit.username, accountToEdit.skinDataUrl);
     } else {
       heading.textContent = t('account_form_add');
       input.value = '';
       saveBtn.textContent = t('btn_create_account');
       cancelBtn.classList.add('hidden');
-      renderAvatarElement(previewAv, getActiveAccount()?.username || 'PeakPlayer');
+      renderAvatarElement(
+        previewAv,
+        getActiveAccount()?.username || 'PeakPlayer',
+        getActiveAccount()?.skinDataUrl
+      );
     }
   }
 
@@ -1202,7 +1237,7 @@
 
       const av = document.createElement('span');
       av.className = 'account-avatar-md';
-      renderAvatarElement(av, acc.username);
+      renderAvatarElement(av, acc.username, acc.skinDataUrl);
 
       const meta = document.createElement('div');
       meta.className = 'account-manager-meta';
@@ -1392,6 +1427,151 @@
     }
   }
 
+  function getSkinTargetAccount() {
+    if (!state.appState) return null;
+    const accounts = state.appState.accounts || [];
+    if (state.skinTargetAccountId) {
+      const found = accounts.find((a) => a.id === state.skinTargetAccountId);
+      if (found) return found;
+    }
+    const active = getActiveAccount();
+    state.skinTargetAccountId = active?.id || null;
+    return active;
+  }
+
+  function ensureSkinViewer() {
+    const canvas = $('skin-3d-canvas');
+    if (!canvas || !window.PeakSkin3D) return null;
+    if (!state.skinViewer) {
+      state.skinViewer = window.PeakSkin3D.createViewer(canvas);
+      state.skinViewer.setOptions(state.skinStageOptions);
+      if (typeof ResizeObserver === 'function') {
+        const ro = new ResizeObserver(() => state.skinViewer?.resize());
+        ro.observe(canvas.parentElement || canvas);
+      }
+    }
+    return state.skinViewer;
+  }
+
+  function renderSkinCatalogGrid(container, items, isPreset, targetAcc) {
+    if (!container) return;
+    container.innerHTML = '';
+    for (const item of items) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      const isSelected = isPreset
+        ? targetAcc?.skinSource === `preset:${item.id}`
+        : Boolean(targetAcc?.hasCustomSkin && targetAcc.skinDataUrl === item.dataUrl);
+      card.className = `skin-preset-card ${isSelected ? 'active' : ''}`;
+
+      const thumb = document.createElement('span');
+      thumb.className = 'skin-thumb-head';
+      if (window.PeakSkin3D && item.dataUrl) {
+        window.PeakSkin3D.extractHeadDataUrl(item.dataUrl)
+          .then((headUrl) => {
+            if (!headUrl) return;
+            const img = new Image();
+            img.alt = item.name;
+            img.src = headUrl;
+            thumb.appendChild(img);
+          })
+          .catch(() => {});
+      }
+
+      const meta = document.createElement('div');
+      meta.className = 'skin-preset-meta';
+      const title = document.createElement('strong');
+      title.textContent = item.name;
+      const sub = document.createElement('span');
+      sub.textContent = item.model === 'slim' ? 'Slim · 3px' : 'Classic · 4px';
+      meta.append(title, sub);
+
+      card.append(thumb, meta);
+      card.addEventListener('click', async () => {
+        const acc = getSkinTargetAccount();
+        if (!acc) return;
+        try {
+          const res = isPreset
+            ? await api.applySkinPreset({ accountId: acc.id, presetId: item.id })
+            : await api.applySkinLibrary({ accountId: acc.id, hash: item.hash });
+          state.appState = res.state;
+          if (res.catalog) state.skinCatalog = res.catalog;
+          renderAll();
+          renderSkinsView();
+          showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+
+      container.appendChild(card);
+    }
+  }
+
+  function renderSkinsView() {
+    if (!state.appState) return;
+    const accounts = state.appState.accounts || [];
+    const targetAcc = getSkinTargetAccount();
+    const sel = $('skins-account-select');
+    if (sel) {
+      sel.innerHTML = '';
+      for (const acc of accounts) {
+        const opt = document.createElement('option');
+        opt.value = acc.id;
+        opt.textContent =
+          acc.id === state.appState.activeAccountId
+            ? `${acc.username} (${t('account_active_badge')})`
+            : acc.username;
+        opt.selected = targetAcc && acc.id === targetAcc.id;
+        sel.appendChild(opt);
+      }
+    }
+
+    const hasCustom = Boolean(targetAcc?.hasCustomSkin && targetAcc?.skinDataUrl);
+    const model = targetAcc?.skinModel === 'slim' ? 'slim' : 'classic';
+
+    if ($('skin-badge-source')) {
+      $('skin-badge-source').textContent = hasCustom ? t('skin_custom_active') : t('skin_no_custom');
+    }
+    if ($('skin-badge-model')) {
+      $('skin-badge-model').textContent = model === 'slim' ? 'Slim 3px' : 'Classic 4px';
+    }
+    if ($('skin-empty-hint')) {
+      $('skin-empty-hint').classList.toggle('hidden', hasCustom);
+    }
+    if ($('btn-reset-skin')) {
+      $('btn-reset-skin').disabled = !hasCustom;
+    }
+    if ($('skin-model-classic')) {
+      $('skin-model-classic').classList.toggle('active', model === 'classic');
+    }
+    if ($('skin-model-slim')) {
+      $('skin-model-slim').classList.toggle('active', model === 'slim');
+    }
+
+    const viewer = ensureSkinViewer();
+    if (viewer) {
+      viewer.setSkin(hasCustom ? targetAcc.skinDataUrl : null, model);
+      viewer.resize();
+    }
+
+    renderSkinCatalogGrid($('skin-presets-grid'), state.skinCatalog.presets || [], true, targetAcc);
+    const libItems = state.skinCatalog.library || [];
+    renderSkinCatalogGrid($('skin-library-grid'), libItems, false, targetAcc);
+    if ($('skin-library-empty')) {
+      $('skin-library-empty').classList.toggle('hidden', libItems.length > 0);
+    }
+  }
+
+  async function loadSkinsCatalog() {
+    try {
+      state.skinCatalog = await api.listSkins();
+    } catch {
+      state.skinCatalog = { presets: [], library: [] };
+    }
+    renderSkinsView();
+  }
+
   function renderAll() {
     renderPlayView();
     renderAccountPopover();
@@ -1401,7 +1581,9 @@
     if (!$('modal-account').classList.contains('hidden')) {
       renderAccountsModalList();
     }
-    if (state.activeView === 'java') {
+    if (state.activeView === 'skins') {
+      renderSkinsView();
+    } else if (state.activeView === 'java') {
       renderJavaAndFabricView();
     }
   }
@@ -1450,6 +1632,11 @@
     $('btn-popover-add-account').addEventListener('click', () =>
       openAccountsModal({ editAccount: null, focusInput: true })
     );
+    $('btn-popover-skin').addEventListener('click', () => {
+      closeAccountPopover();
+      state.skinTargetAccountId = getActiveAccount()?.id || null;
+      switchView('skins');
+    });
     $('btn-popover-manage-accounts').addEventListener('click', () =>
       openAccountsModal({ editAccount: null, focusInput: false })
     );
@@ -1894,6 +2081,147 @@
       renderAll();
     });
 
+    // Skin Studio
+    $('skins-account-select').addEventListener('change', (e) => {
+      state.skinTargetAccountId = e.target.value;
+      renderSkinsView();
+    });
+    const syncStageBtn = (btnId, key) => {
+      const btn = $(btnId);
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        state.skinStageOptions[key] = !state.skinStageOptions[key];
+        btn.classList.toggle('active', state.skinStageOptions[key]);
+        state.skinViewer?.setOptions(state.skinStageOptions);
+      });
+    };
+    syncStageBtn('btn-skin-rotate', 'autoRotate');
+    syncStageBtn('btn-skin-walk', 'walk');
+    syncStageBtn('btn-skin-outer', 'showOuterLayer');
+    $('btn-skin-cam-reset').addEventListener('click', () => state.skinViewer?.resetCamera());
+
+    $('btn-pick-skin').addEventListener('click', async () => {
+      const acc = getSkinTargetAccount();
+      if (!acc) return;
+      try {
+        const res = await api.pickAndUploadSkin({
+          accountId: acc.id,
+          model: acc.skinModel || 'classic'
+        });
+        if (!res.canceled) {
+          state.appState = res.state;
+          if (res.catalog) state.skinCatalog = res.catalog;
+          renderAll();
+          renderSkinsView();
+          showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    const skinDz = $('skin-dropzone');
+    skinDz.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      skinDz.classList.add('dragover');
+    });
+    skinDz.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      skinDz.classList.remove('dragover');
+    });
+    skinDz.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      skinDz.classList.remove('dragover');
+      const file = (e.dataTransfer?.files || [])[0];
+      const filePath = file ? api.getFilePath(file) : '';
+      if (!filePath) return;
+      const acc = getSkinTargetAccount();
+      if (!acc) return;
+      try {
+        const res = await api.uploadSkinPath({
+          accountId: acc.id,
+          filePath,
+          model: acc.skinModel || 'classic'
+        });
+        state.appState = res.state;
+        if (res.catalog) state.skinCatalog = res.catalog;
+        renderAll();
+        renderSkinsView();
+        showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    const runFetchByNick = async () => {
+      const acc = getSkinTargetAccount();
+      const nick = $('skin-fetch-input').value.trim();
+      if (!acc || !nick) return;
+      const btn = $('btn-fetch-skin');
+      btn.disabled = true;
+      btn.textContent = t('btn_downloading');
+      try {
+        const res = await api.fetchSkinByNick({
+          accountId: acc.id,
+          username: nick,
+          model: acc.skinModel || 'classic'
+        });
+        state.appState = res.state;
+        if (res.catalog) state.skinCatalog = res.catalog;
+        $('skin-fetch-input').value = '';
+        renderAll();
+        renderSkinsView();
+        showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = t('btn_fetch_skin');
+      }
+    };
+    $('btn-fetch-skin').addEventListener('click', runFetchByNick);
+    $('skin-fetch-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        runFetchByNick();
+      }
+    });
+
+    for (const btn of [$('skin-model-classic'), $('skin-model-slim')]) {
+      btn.addEventListener('click', async () => {
+        const acc = getSkinTargetAccount();
+        const model = btn.dataset.model === 'slim' ? 'slim' : 'classic';
+        if (!acc) return;
+        try {
+          const res = await api.setSkinModel({ accountId: acc.id, model });
+          state.appState = res.state;
+          renderAll();
+          renderSkinsView();
+          showToast(t('toast_skin_model', { model: model === 'slim' ? 'Slim 3px' : 'Classic 4px' }), 'info');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    }
+
+    $('btn-reset-skin').addEventListener('click', async () => {
+      const acc = getSkinTargetAccount();
+      if (!acc) return;
+      try {
+        const res = await api.resetAccountSkin({ accountId: acc.id });
+        state.appState = res.state;
+        if (res.catalog) state.skinCatalog = res.catalog;
+        renderAll();
+        renderSkinsView();
+        showToast(t('toast_skin_reset', { name: acc.username }), 'info');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+
+    // Console & logs filters
     $('console-level-filters').addEventListener('click', (e) => {
       const pill = e.target.closest('.filter-pill');
       if (!pill) return;
@@ -2034,7 +2362,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.3.2 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.4.0 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

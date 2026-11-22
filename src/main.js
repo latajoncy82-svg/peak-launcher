@@ -41,6 +41,15 @@ const {
   launchProfile,
   stopGame
 } = require('./engine/launcher');
+const {
+  setAccountSkinFromFile,
+  setAccountSkinFromUsername,
+  setAccountSkinFromPreset,
+  setAccountSkinFromLibrary,
+  clearAccountSkin,
+  getAccountSkinInfo,
+  listSkinCatalog
+} = require('./engine/skinManager');
 
 const APP_ID = 'com.peaklauncher.app';
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -91,8 +100,19 @@ function handleIpc(channel, handler) {
 function buildStatePayload() {
   const state = store.getState();
   const dataDir = store.getDataDir();
+  const accounts = (state.accounts || []).map((acc) => {
+    const skin = getAccountSkinInfo(dataDir, acc);
+    return {
+      ...acc,
+      skinModel: skin.skinModel,
+      skinSource: skin.skinSource,
+      hasCustomSkin: skin.hasCustomSkin,
+      skinDataUrl: skin.skinDataUrl
+    };
+  });
   return {
     ...state,
+    accounts,
     dataDir,
     systemMemory: getSystemMemoryInfo(),
     launchStatus: getLaunchStatus(),
@@ -136,7 +156,100 @@ function registerIpcHandlers() {
   });
   handleIpc('account:delete', (_e, accountId) => {
     store.deleteAccount(accountId);
+    clearAccountSkin({ dataDir: store.getDataDir(), accountId });
     return buildStatePayload();
+  });
+
+  // Skins Studio
+  const resolveTargetAccount = (accountId) =>
+    (accountId ? store.getState().accounts.find((a) => a.id === accountId) : null) ||
+    store.getActiveAccount();
+
+  handleIpc('skins:list', () => listSkinCatalog(store.getDataDir()));
+  handleIpc('skins:pickAndUpload', async (_e, { accountId, model = 'classic' } = {}) => {
+    const acc = resolveTargetAccount(accountId);
+    if (!acc) throw new Error('Nie znaleziono konta.');
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: 'Wybierz plik skina Minecraft (.png)',
+      filters: [{ name: 'Skin Minecraft PNG', extensions: ['png'] }],
+      properties: ['openFile']
+    });
+    if (canceled || !filePaths || !filePaths[0]) {
+      return { canceled: true };
+    }
+    const dataDir = store.getDataDir();
+    const res = setAccountSkinFromFile({
+      dataDir,
+      accountId: acc.id,
+      filePath: filePaths[0],
+      model
+    });
+    store.updateAccountSkin(acc.id, res);
+    return { canceled: false, skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+  });
+  handleIpc('skins:uploadPath', (_e, { accountId, filePath, model = 'classic' } = {}) => {
+    const acc = resolveTargetAccount(accountId);
+    if (!acc) throw new Error('Nie znaleziono konta.');
+    const dataDir = store.getDataDir();
+    const res = setAccountSkinFromFile({
+      dataDir,
+      accountId: acc.id,
+      filePath,
+      model
+    });
+    store.updateAccountSkin(acc.id, res);
+    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+  });
+  handleIpc('skins:fetchByNick', async (_e, { accountId, username, model = 'classic' } = {}) => {
+    const acc = resolveTargetAccount(accountId);
+    if (!acc) throw new Error('Nie znaleziono konta.');
+    const dataDir = store.getDataDir();
+    const res = await setAccountSkinFromUsername({
+      dataDir,
+      accountId: acc.id,
+      username,
+      model
+    });
+    store.updateAccountSkin(acc.id, res);
+    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+  });
+  handleIpc('skins:applyPreset', (_e, { accountId, presetId } = {}) => {
+    const acc = resolveTargetAccount(accountId);
+    if (!acc) throw new Error('Nie znaleziono konta.');
+    const dataDir = store.getDataDir();
+    const res = setAccountSkinFromPreset({
+      dataDir,
+      accountId: acc.id,
+      presetId
+    });
+    store.updateAccountSkin(acc.id, res);
+    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+  });
+  handleIpc('skins:applyLibrary', (_e, { accountId, hash } = {}) => {
+    const acc = resolveTargetAccount(accountId);
+    if (!acc) throw new Error('Nie znaleziono konta.');
+    const dataDir = store.getDataDir();
+    const res = setAccountSkinFromLibrary({
+      dataDir,
+      accountId: acc.id,
+      hash
+    });
+    store.updateAccountSkin(acc.id, res);
+    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+  });
+  handleIpc('skins:setModel', (_e, { accountId, model } = {}) => {
+    const acc = resolveTargetAccount(accountId);
+    if (!acc) throw new Error('Nie znaleziono konta.');
+    store.updateAccountSkin(acc.id, { skinModel: model === 'slim' ? 'slim' : 'classic' });
+    return { state: buildStatePayload() };
+  });
+  handleIpc('skins:reset', (_e, { accountId } = {}) => {
+    const acc = resolveTargetAccount(accountId);
+    if (!acc) throw new Error('Nie znaleziono konta.');
+    const dataDir = store.getDataDir();
+    const res = clearAccountSkin({ dataDir, accountId: acc.id });
+    store.updateAccountSkin(acc.id, res);
+    return { catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
   });
 
   // Profiles
@@ -401,6 +514,7 @@ function registerIpcHandlers() {
     const result = await launchProfile({
       profile,
       account,
+      allAccounts: state.accounts,
       settings: state.settings,
       dataDir,
       onProgress: (p) => sendToRenderer('launcher:progress', p),
@@ -477,7 +591,21 @@ async function runScreenshotCapture() {
   const modsShot = await mainWindow.webContents.capturePage();
   fs.writeFileSync(path.join(outDir, 'screen-mods.png'), modsShot.toPNG());
 
-  // 4. Dark Mode - Java & Fabric View
+  // 4. Dark Mode - Skin Studio View (click preset to preview real 3D character + avatar update)
+  await mainWindow.webContents.executeJavaScript(`new Promise((resolve) => {
+    window.__peakTestNavigate('skins', 'alpine-dark').then(() => {
+      setTimeout(() => {
+        const card = document.querySelector('#skin-presets-grid .skin-preset-card');
+        if (card) card.click();
+        resolve(Boolean(card));
+      }, 450);
+    });
+  })`);
+  await wait(1100);
+  const skinsShot = await mainWindow.webContents.capturePage();
+  fs.writeFileSync(path.join(outDir, 'screen-skins.png'), skinsShot.toPNG());
+
+  // 5. Dark Mode - Java & Fabric View
   await mainWindow.webContents.executeJavaScript("window.__peakTestNavigate('java', 'alpine-dark')");
   await wait(800);
   const javaShot = await mainWindow.webContents.capturePage();

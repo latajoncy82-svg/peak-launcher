@@ -5,6 +5,8 @@ const { downloadBatch, downloadFile, safeExtractZip } = require('./download');
 const { findInstalledFabricForMc, installFabric, mavenNameToRelativePath } = require('./fabricManager');
 const { findJavaForMajor, installJava } = require('./javaManager');
 const { ensureDataTree, ensureDir, getPaths, getProfileDirs } = require('./paths');
+const { getAccountSkinPath } = require('./skinManager');
+const { ensureAuthlibInjector, startLocalSkinServer } = require('./skinServer');
 const { ensureVersionJson } = require('./versions');
 
 let activeGameProcess = null;
@@ -200,7 +202,8 @@ function buildLaunchSpec({
   javaPath,
   parentJson,
   childJson = null,
-  assetIndexJson = null
+  assetIndexJson = null,
+  skinAgent = null
 }) {
   const paths = getPaths(dataDir);
   const profileDirs = getProfileDirs(dataDir, profile.id);
@@ -253,6 +256,9 @@ function buildLaunchSpec({
     is_quick_play_realms: false
   };
 
+  const uuidHex = (account?.uuid || '00000000-0000-3000-8000-000000000000').replace(/-/g, '');
+  const useSkinAgent = Boolean(skinAgent && skinAgent.jarPath && skinAgent.apiUrl);
+
   const replacements = {
     auth_player_name: account?.username || 'PeakPlayer',
     version_name: effectiveId,
@@ -260,12 +266,12 @@ function buildLaunchSpec({
     assets_root: paths.assetsDir,
     assets_index_name: assetIndexId,
     game_assets: virtualAssetsRoot,
-    auth_uuid: (account?.uuid || '00000000-0000-3000-8000-000000000000').replace(/-/g, ''),
-    auth_access_token: '0',
-    auth_session: `token:0:${(account?.uuid || '00000000000030008000000000000000').replace(/-/g, '')}`,
+    auth_uuid: uuidHex,
+    auth_access_token: useSkinAgent ? uuidHex : '0',
+    auth_session: `token:${useSkinAgent ? uuidHex : '0'}:${uuidHex}`,
     clientid: '',
     auth_xuid: '',
-    user_type: 'legacy',
+    user_type: useSkinAgent ? 'mojang' : 'legacy',
     user_properties: '{}',
     version_type: merged.type || 'release',
     natives_directory: nativesDir,
@@ -273,7 +279,7 @@ function buildLaunchSpec({
     classpath_separator: path.delimiter,
     classpath,
     launcher_name: 'PeakLauncher',
-    launcher_version: '1.3.2',
+    launcher_version: '1.4.0',
     resolution_width: String(settings.width || 1280),
     resolution_height: String(settings.height || 720)
   };
@@ -296,7 +302,7 @@ function buildLaunchSpec({
     jvmArgs = [
       `-Djava.library.path=${nativesDir}`,
       `-Dminecraft.launcher.brand=PeakLauncher`,
-      `-Dminecraft.launcher.version=1.3.2`,
+      `-Dminecraft.launcher.version=1.4.0`,
       '-cp',
       classpath
     ];
@@ -317,10 +323,21 @@ function buildLaunchSpec({
     }
   }
 
+  const skinJvmArgs = useSkinAgent
+    ? [
+        `-javaagent:${skinAgent.jarPath}=${skinAgent.apiUrl}`,
+        '-Dauthlibinjector.side=client',
+        ...(skinAgent.prefetchedBase64
+          ? [`-Dauthlibinjector.yggdrasil.prefetched=${skinAgent.prefetchedBase64}`]
+          : [])
+      ]
+    : [];
+
   const allArgs = [
     ...baseMemoryArgs,
     ...userJvmArgs,
     ...jvmArgs,
+    ...skinJvmArgs,
     merged.mainClass,
     ...gameArgs
   ];
@@ -446,7 +463,8 @@ async function prepareAssets({ assetIndexMeta, assetIndexId, dataDir, gameDir, e
 async function prepareProfileFiles({
   profile,
   account,
-  settings,
+  allAccounts = [],
+  settings = {},
   dataDir,
   onProgress = null,
   onLog = null
@@ -560,6 +578,34 @@ async function prepareProfileFiles({
     emitProgress
   });
 
+  let skinServer = null;
+  let skinAgent = null;
+  const activeSkinPath = getAccountSkinPath(dataDir, account);
+  if (activeSkinPath) {
+    try {
+      emitProgress('ready', 95, 'Przygotowanie lokalnego serwera skinów...');
+      const jarPath = await ensureAuthlibInjector(dataDir);
+      const serverAccounts = Array.isArray(allAccounts) && allAccounts.length > 0 ? allAccounts : [account].filter(Boolean);
+      skinServer = await startLocalSkinServer({ dataDir, accounts: serverAccounts });
+      skinAgent = {
+        jarPath,
+        apiUrl: skinServer.apiUrl,
+        prefetchedBase64: skinServer.prefetchedBase64
+      };
+      log(
+        'SYSTEM',
+        `Aktywowano własny skin gracza ${account?.username || ''} (${account?.skinModel || 'classic'}) przez lokalny Yggdrasil (${skinServer.apiUrl}).`
+      );
+    } catch (skinErr) {
+      log('WARN', `Nie udało się uruchomić lokalnego serwera skinów (${skinErr.message}) — gra wystartuje bez własnego skina.`);
+      if (skinServer) {
+        await skinServer.close().catch(() => {});
+        skinServer = null;
+      }
+      skinAgent = null;
+    }
+  }
+
   // Rebuild spec with assetIndexJson so legacy virtual/resources path is exact
   spec = buildLaunchSpec({
     profile,
@@ -569,16 +615,18 @@ async function prepareProfileFiles({
     javaPath: javaInfo.path,
     parentJson,
     childJson,
-    assetIndexJson
+    assetIndexJson,
+    skinAgent
   });
 
   emitProgress('ready', 100, 'Wszystkie pliki gotowe!');
-  return { spec, javaInfo };
+  return { spec, javaInfo, skinServer };
 }
 
 async function launchProfile({
   profile,
   account,
+  allAccounts = [],
   settings,
   dataDir,
   onProgress = null,
@@ -593,16 +641,27 @@ async function launchProfile({
     if (onStatus) onStatus({ state, profileId: profile.id, ...extra });
   };
 
+  let activeSkinServer = null;
+  const closeSkinServer = () => {
+    if (activeSkinServer) {
+      const srv = activeSkinServer;
+      activeSkinServer = null;
+      srv.close().catch(() => {});
+    }
+  };
+
   emitStatus('preparing');
   try {
-    const { spec } = await prepareProfileFiles({
+    const { spec, skinServer } = await prepareProfileFiles({
       profile,
       account,
+      allAccounts,
       settings,
       dataDir,
       onProgress,
       onLog
     });
+    activeSkinServer = skinServer || null;
 
     if (onLog) {
       onLog({
@@ -644,6 +703,7 @@ async function launchProfile({
     child.on('error', (err) => {
       activeGameProcess = null;
       activeProfileRunningId = null;
+      closeSkinServer();
       if (onLog) {
         onLog({ level: 'ERROR', text: `Błąd procesu gry: ${err.message}`, ts: new Date().toISOString() });
       }
@@ -653,6 +713,7 @@ async function launchProfile({
     child.on('exit', (code) => {
       activeGameProcess = null;
       activeProfileRunningId = null;
+      closeSkinServer();
       if (onLog) {
         const hint =
           code && code !== 0
@@ -669,6 +730,7 @@ async function launchProfile({
 
     return { pid: child.pid, effectiveId: spec.effectiveId };
   } catch (err) {
+    closeSkinServer();
     emitStatus('idle', { error: err.message });
     throw err;
   }

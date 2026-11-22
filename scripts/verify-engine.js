@@ -1,4 +1,6 @@
 const assert = require('assert');
+const { execFileSync } = require('child_process');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -26,6 +28,18 @@ const {
   deleteMod,
   checkAndUpdateProfileMods
 } = require('../src/engine/modsManager');
+const {
+  validateMinecraftSkinPng,
+  listSkinCatalog,
+  setAccountSkinFromPreset,
+  setAccountSkinFromUsername,
+  clearAccountSkin,
+  getAccountSkinInfo
+} = require('../src/engine/skinManager');
+const {
+  ensureAuthlibInjector,
+  startLocalSkinServer
+} = require('../src/engine/skinServer');
 const { buildLaunchSpec, ensureNativesTree } = require('../src/engine/launcher');
 
 function assertNoPlaceholders(args, label) {
@@ -243,6 +257,106 @@ async function runVerification() {
       }
       console.log(`   -> [${tc.label}] OK (Java ${spec.javaMajor}, libs: ${spec.librariesToDownload.length}, args: ${spec.args.length})`);
     }
+
+    console.log('7. Testowanie Studia Skinów, authlib-injector 1.2.8 i lokalnego serwera Yggdrasil...');
+    assert.throws(
+      () => validateMinecraftSkinPng(Buffer.from('not-a-png')),
+      /PNG/i,
+      'Nie odrzucono nieprawidłowego pliku skina'
+    );
+    const catalogBefore = listSkinCatalog(dataDir);
+    assert(catalogBefore.presets.length === 4, `Oczekiwano 4 gotowych presetów skinów, jest: ${catalogBefore.presets.length}`);
+
+    const presetRes = setAccountSkinFromPreset({
+      dataDir,
+      accountId: account.id,
+      presetId: 'peak-climber'
+    });
+    store.updateAccountSkin(account.id, presetRes);
+    const infoAfterPreset = getAccountSkinInfo(dataDir, store.getActiveAccount());
+    assert(infoAfterPreset.hasCustomSkin && infoAfterPreset.skinDataUrl.startsWith('data:image/png;base64,'));
+
+    const nickRes = await setAccountSkinFromUsername({
+      dataDir,
+      accountId: account.id,
+      username: 'Notch',
+      model: 'classic'
+    });
+    store.updateAccountSkin(account.id, nickRes);
+    assert(listSkinCatalog(dataDir).library.length >= 2, 'Biblioteka skinów powinna zapisać pobrany i presetowy skin');
+
+    const jarPath = await ensureAuthlibInjector(dataDir);
+    assert(fs.existsSync(jarPath), 'Brak pobranego authlib-injector-1.2.8.jar');
+
+    const skinServer = await startLocalSkinServer({
+      dataDir,
+      accounts: store.getState().accounts
+    });
+    try {
+      const metaRes = await fetch(`${skinServer.apiUrl}/`);
+      assert.strictEqual(metaRes.status, 200);
+      const metaJson = await metaRes.json();
+      assert(metaJson.signaturePublickey, 'Brak klucza signaturePublickey');
+
+      const uuidHex = store.getActiveAccount().uuid.replace(/-/g, '').toLowerCase();
+      const profRes = await fetch(`${skinServer.apiUrl}/sessionserver/session/minecraft/profile/${uuidHex}`);
+      assert.strictEqual(profRes.status, 200);
+      const profJson = await profRes.json();
+      const prop = profJson.properties.find((p) => p.name === 'textures');
+      assert(prop && prop.value && prop.signature, 'Brak podpisanej właściwości textures');
+
+      const verifier = crypto.createVerify('RSA-SHA1');
+      verifier.update(prop.value, 'utf8');
+      assert.strictEqual(
+        verifier.verify(metaJson.signaturePublickey, prop.signature, 'base64'),
+        true,
+        'Nieprawidłowy podpis RSA-SHA1 tekstury skina!'
+      );
+
+      const decodedTextures = JSON.parse(Buffer.from(prop.value, 'base64').toString('utf8'));
+      const texRes = await fetch(decodedTextures.textures.SKIN.url);
+      assert.strictEqual(texRes.status, 200);
+      assert.strictEqual(texRes.headers.get('content-type'), 'image/png');
+
+      const attrRes = await fetch(`${skinServer.apiUrl}/minecraftservices/player/attributes`);
+      assert.strictEqual(attrRes.status, 200);
+      const attrJson = await attrRes.json();
+      assert.strictEqual(attrJson.privileges.onlineChat.enabled, true);
+
+      const parent1214 = await ensureVersionJson('1.21.4', dataDir);
+      const skinSpec = buildLaunchSpec({
+        profile: { id: 'test-skin-1214', name: 'Skin Test', mcVersion: '1.21.4', loader: 'vanilla' },
+        account: store.getActiveAccount(),
+        settings,
+        dataDir,
+        javaPath: dummyJava,
+        parentJson: parent1214,
+        skinAgent: {
+          jarPath,
+          apiUrl: skinServer.apiUrl,
+          prefetchedBase64: skinServer.prefetchedBase64
+        }
+      });
+      assert(skinSpec.args.some((a) => a.startsWith(`-javaagent:${jarPath}=http://127.0.0.1:`)));
+      assert(skinSpec.args.some((a) => a.startsWith('-Dauthlibinjector.yggdrasil.prefetched=')));
+
+      execFileSync(
+        dummyJava,
+        [
+          `-javaagent:${jarPath}=${skinServer.apiUrl}`,
+          `-Dauthlibinjector.yggdrasil.prefetched=${skinServer.prefetchedBase64}`,
+          '-version'
+        ],
+        { stdio: 'pipe' }
+      );
+      console.log(`   -> Presety, pobieranie skina, podpis Yggdrasil, texture PNG i authlib-injector (Java ${javas.list[0].major}) OK.`);
+    } finally {
+      await skinServer.close();
+    }
+
+    const cleared = clearAccountSkin({ dataDir, accountId: account.id });
+    store.updateAccountSkin(account.id, cleared);
+    assert.strictEqual(getAccountSkinInfo(dataDir, store.getActiveAccount()).hasCustomSkin, false);
 
     console.log('\nWSZYSTKIE TESTY SILNIKA ZAKOŃCZONE SUKCESEM!');
   } finally {
