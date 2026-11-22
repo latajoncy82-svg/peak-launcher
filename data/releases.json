@@ -1,5 +1,27 @@
 [
   {
+    "tag": "v1.5.1",
+    "name": "Peak Launcher 1.5.1 — Prawdziwa Domena <adres>.peak Lokalnie i Przez Internet",
+    "publishedAt": "2026-11-22T22:30:00Z",
+    "body": "### Najważniejsze nowości w wersji 1.5.1\n- **Globalny Tunel Publiczny `.peak`**: karta **Tunel publiczny (Internet)** pokazuje i kopiuje Twoją domenę `<adres>.peak` zamiast surowego hosta Pinggy, publikując trasę dla znajomych korzystających z Peak Launchera (oraz udostępniając zapasowy adres TCP dla zwykłych klientów).\n- **Prawdziwa domena `<adres>.peak` bezpośrednio w grze**: wbudowany provider Java DNS SPI (`peak-dns.jar` dla Java 18+) rozwiązuje `szczyt.peak` i wszystkie domeny `*.peak` w trybie Multiplayer i Quick Play, zachowując pełną kompatybilność ze skinami Yggdrasil i zapytaniami Mojang/Modrinth.\n- **Wbudowany Router Handshake `.peak` (`0.0.0.0:25565`) i Rejestr domen**: router TCP kieruje ruch z pakietu Handshake Minecrafta do lokalnych serwerów, aktywnych globalnych domen znajomych oraz własnych wpisów w `Udostępnianie .peak`.",
+    "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.5.1",
+    "prerelease": false,
+    "assets": {
+      "installer": {
+        "name": "Peak-Launcher-Setup-1.5.1.exe",
+        "size": 123419948,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.5.1/Peak-Launcher-Setup-1.5.1.exe",
+        "downloadCount": 0
+      },
+      "portable": {
+        "name": "Peak-Launcher-Portable-1.5.1.exe",
+        "size": 112100759,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.5.1/Peak-Launcher-Portable-1.5.1.exe",
+        "downloadCount": 0
+      }
+    }
+  },
+  {
     "tag": "v1.5.0",
     "name": "Peak Launcher 1.5.0 — Własny Hosting .peak i Mody Serwerowe",
     "publishedAt": "2026-11-22T19:15:00Z",
