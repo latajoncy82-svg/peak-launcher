@@ -1,4 +1,5 @@
 const fs = require('fs');
+const net = require('net');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
@@ -7,6 +8,11 @@ const { FABRIC_META_BASE, getFabricLoadersForMc } = require('./fabricManager');
 const { findJavaForMajor, installJava } = require('./javaManager');
 const { listModsInDirectory, readMetadataFile } = require('./modsManager');
 const { ensureDir, ensureDataTree, getServerDirs } = require('./paths');
+const {
+  claimAndPublishPeakDomain,
+  publishPeakRecord,
+  unpublishPeakDomain
+} = require('./peakDirectory');
 const { ensureVersionJson, estimateJavaMajor } = require('./versions');
 
 const MAX_LOG_LINES = 600;
@@ -22,6 +28,7 @@ function getOrCreateRuntime(serverId) {
       state: 'offline', // offline | preparing | starting | online | stopping
       pid: null,
       port: 25565,
+      bindPort: null,
       startedAt: null,
       readyAt: null,
       players: new Set(),
@@ -31,9 +38,14 @@ function getOrCreateRuntime(serverId) {
         active: false,
         connecting: false,
         address: '',
+        publicDomain: '',
+        rawAddress: '',
+        registryActive: false,
         provider: '',
         note: '',
-        process: null
+        process: null,
+        heartbeatTimer: null,
+        ownerId: ''
       }
     };
     runtimes.set(serverId, rt);
@@ -47,6 +59,7 @@ function serializeRuntimeStatus(rt) {
     state: rt.state,
     pid: rt.pid,
     port: rt.port,
+    bindPort: rt.bindPort || rt.port,
     startedAt: rt.startedAt,
     readyAt: rt.readyAt,
     players: Array.from(rt.players),
@@ -55,10 +68,35 @@ function serializeRuntimeStatus(rt) {
       active: Boolean(rt.tunnel.active),
       connecting: Boolean(rt.tunnel.connecting),
       address: rt.tunnel.address || '',
+      publicDomain: rt.tunnel.publicDomain || '',
+      rawAddress: rt.tunnel.rawAddress || '',
+      registryActive: Boolean(rt.tunnel.registryActive),
       provider: rt.tunnel.provider || '',
       note: rt.tunnel.note || ''
     }
   };
+}
+
+async function findFreeLoopbackPort(startPort = 25600, excludePorts = new Set()) {
+  const tryPort = (port) =>
+    new Promise((resolve) => {
+      const tester = net.createServer();
+      tester.once('error', () => resolve(null));
+      tester.listen({ port, host: '127.0.0.1', exclusive: true }, () => {
+        const addr = tester.address();
+        const resolvedPort = addr && typeof addr === 'object' ? addr.port : port;
+        tester.close(() => resolve(resolvedPort));
+      });
+    });
+
+  for (let candidate = startPort; candidate <= startPort + 400 && candidate <= 65535; candidate++) {
+    if (excludePorts.has(candidate)) continue;
+    const ok = await tryPort(candidate);
+    if (ok) return ok;
+  }
+  const fallback = await tryPort(0);
+  if (fallback) return fallback;
+  throw new Error('Nie można znaleźć wolnego wewnętrznego portu loopback (127.0.0.1).');
 }
 
 function getServerRuntimeStatus(serverId) {
@@ -133,9 +171,12 @@ function readServerProperties(filePath) {
   return map;
 }
 
-function writeServerProperties(filePath, serverConfig) {
+function writeServerProperties(filePath, serverConfig, options = {}) {
   ensureDir(path.dirname(filePath));
   const existing = readServerProperties(filePath);
+  const effectivePort = Number(options.bindPort || serverConfig.port) || 25565;
+  const effectiveIp =
+    options.bindHost !== undefined ? String(options.bindHost) : String(existing['server-ip'] || '');
   const merged = {
     'accepts-transfers': 'false',
     'allow-flight': 'true',
@@ -162,7 +203,7 @@ function writeServerProperties(filePath, serverConfig) {
     'pause-when-empty-seconds': '60',
     pvp: serverConfig.pvp !== false ? 'true' : 'false',
     'server-ip': '',
-    'server-port': String(Math.max(1024, Math.min(65535, Number(serverConfig.port) || 25565))),
+    'server-port': String(Math.max(1024, Math.min(65535, effectivePort))),
     'simulation-distance': String(Math.max(4, Math.min(16, Number(serverConfig.viewDistance) || 10))),
     'spawn-protection': '0',
     'view-distance': String(Math.max(4, Math.min(32, Number(serverConfig.viewDistance) || 10))),
@@ -171,7 +212,8 @@ function writeServerProperties(filePath, serverConfig) {
   };
 
   // Always enforce launcher-managed settings over existing values
-  merged['server-port'] = String(Math.max(1024, Math.min(65535, Number(serverConfig.port) || 25565)));
+  merged['server-ip'] = effectiveIp;
+  merged['server-port'] = String(Math.max(1024, Math.min(65535, effectivePort)));
   merged['max-players'] = String(Math.max(1, Math.min(100, Number(serverConfig.maxPlayers) || 10)));
   merged.gamemode = serverConfig.gamemode || 'survival';
   merged.difficulty = serverConfig.difficulty || 'normal';
@@ -221,6 +263,8 @@ async function prepareServerRuntime({
   server,
   settings = {},
   dataDir,
+  bindHost = undefined,
+  bindPort = null,
   onProgress = null,
   onLog = null
 }) {
@@ -327,7 +371,7 @@ async function prepareServerRuntime({
 
   emitProgress('config', 95, 'Zapisywanie eula.txt i server.properties...');
   writeEulaFile(dirs.eulaPath, true);
-  writeServerProperties(dirs.propertiesPath, server);
+  writeServerProperties(dirs.propertiesPath, server, { bindHost, bindPort });
 
   fs.writeFileSync(
     dirs.runtimeMetaPath,
@@ -359,6 +403,7 @@ async function startServer({
   server,
   settings = {},
   dataDir,
+  routerListeningOn25565 = false,
   onProgress = null,
   onLog = null,
   onStatus = null
@@ -368,10 +413,26 @@ async function startServer({
     throw new Error(`Serwer "${server.name}" już działa lub jest w trakcie uruchamiania.`);
   }
 
+  const logicalPort = Number(server.port) || 25565;
+  const usedBindPorts = new Set();
   for (const other of runtimes.values()) {
-    if (other.serverId !== server.id && other.state !== 'offline' && Number(other.port) === Number(server.port)) {
-      throw new Error(`Port ${server.port} jest obecnie zajęty przez inny uruchomiony serwer.`);
+    if (other.serverId !== server.id && other.state !== 'offline') {
+      if (Number(other.port) === logicalPort) {
+        throw new Error(`Port ${logicalPort} jest obecnie zajęty przez inny uruchomiony serwer.`);
+      }
+      if (other.bindPort) usedBindPorts.add(Number(other.bindPort));
+      if (other.port) usedBindPorts.add(Number(other.port));
     }
+  }
+
+  let resolvedBindPort = logicalPort;
+  let resolvedBindHost = '';
+  if (routerListeningOn25565 && logicalPort === 25565) {
+    resolvedBindPort = await findFreeLoopbackPort(25600, usedBindPorts);
+    resolvedBindHost = '127.0.0.1';
+  } else if (usedBindPorts.has(logicalPort)) {
+    resolvedBindPort = await findFreeLoopbackPort(25600, usedBindPorts);
+    resolvedBindHost = '127.0.0.1';
   }
 
   const emitStatus = () => {
@@ -379,7 +440,8 @@ async function startServer({
   };
 
   rt.state = 'preparing';
-  rt.port = Number(server.port) || 25565;
+  rt.port = logicalPort;
+  rt.bindPort = resolvedBindPort;
   rt.players.clear();
   rt.startedAt = new Date().toISOString();
   rt.readyAt = null;
@@ -391,6 +453,8 @@ async function startServer({
       server,
       settings,
       dataDir,
+      bindHost: resolvedBindHost,
+      bindPort: resolvedBindPort,
       onProgress,
       onLog
     });
@@ -398,10 +462,14 @@ async function startServer({
     const ramMb = Math.max(1024, Number(server.ramMb) || 2048);
     const args = [`-Xms512M`, `-Xmx${ramMb}M`, '-XX:+UseG1GC', '-jar', runtime.jarFileName, 'nogui'];
 
+    const bindSummary =
+      resolvedBindPort !== logicalPort
+        ? `domena ${server.peakDomain} (:25565 -> 127.0.0.1:${resolvedBindPort})`
+        : `port ${logicalPort}`;
     appendServerLog(
       rt,
       'SYSTEM',
-      `Uruchamianie ${server.peakDomain} (${server.loader.toUpperCase()} ${server.mcVersion}, port ${server.port}, RAM ${ramMb} MB)...`,
+      `Uruchamianie ${server.peakDomain} (${server.loader.toUpperCase()} ${server.mcVersion}, ${bindSummary}, RAM ${ramMb} MB)...`,
       onLog
     );
 
@@ -430,7 +498,9 @@ async function startServer({
         appendServerLog(
           rt,
           'SYSTEM',
-          `Serwer ${server.peakDomain} jest ONLINE! Adres lokalny: 127.0.0.1:${server.port}`,
+          routerListeningOn25565
+            ? `Serwer ${server.peakDomain} jest ONLINE! Wpisz w Minecraft: ${server.peakDomain}`
+            : `Serwer ${server.peakDomain} jest ONLINE! Adres lokalny: 127.0.0.1:${rt.bindPort || server.port}`,
           onLog
         );
         emitStatus();
@@ -465,6 +535,7 @@ async function startServer({
     child.on('error', (err) => {
       rt.process = null;
       rt.pid = null;
+      rt.bindPort = null;
       rt.state = 'offline';
       rt.players.clear();
       appendServerLog(rt, 'ERROR', `Błąd procesu serwera: ${err.message}`, onLog);
@@ -475,6 +546,7 @@ async function startServer({
     child.on('exit', (code) => {
       rt.process = null;
       rt.pid = null;
+      rt.bindPort = null;
       rt.state = 'offline';
       rt.players.clear();
       appendServerLog(
@@ -491,6 +563,7 @@ async function startServer({
   } catch (err) {
     rt.process = null;
     rt.pid = null;
+    rt.bindPort = null;
     rt.state = 'offline';
     rt.players.clear();
     appendServerLog(rt, 'ERROR', err.message, onLog);
@@ -558,17 +631,38 @@ async function stopServer(serverId, { onStatus = null, onLog = null, timeoutMs =
   return serializeRuntimeStatus(rt);
 }
 
-async function restartServer({ server, settings = {}, dataDir, onProgress = null, onLog = null, onStatus = null }) {
+async function restartServer({
+  server,
+  settings = {},
+  dataDir,
+  routerListeningOn25565 = false,
+  onProgress = null,
+  onLog = null,
+  onStatus = null
+}) {
   const rt = getOrCreateRuntime(server.id);
   if (rt.state !== 'offline') {
     await stopServer(server.id, { onStatus, onLog });
   }
-  return startServer({ server, settings, dataDir, onProgress, onLog, onStatus });
+  return startServer({
+    server,
+    settings,
+    dataDir,
+    routerListeningOn25565,
+    onProgress,
+    onLog,
+    onStatus
+  });
 }
 
 function stopPublicTunnel(serverId, { onStatus = null, onLog = null } = {}) {
   const rt = getOrCreateRuntime(serverId);
   const hadTunnel = Boolean(rt.tunnel.active || rt.tunnel.connecting || rt.tunnel.process);
+  const prevPublicDomain = rt.tunnel.registryActive ? rt.tunnel.publicDomain : '';
+  const prevOwnerId = rt.tunnel.ownerId || '';
+  if (rt.tunnel.heartbeatTimer) {
+    clearInterval(rt.tunnel.heartbeatTimer);
+  }
   if (rt.tunnel.process) {
     try {
       rt.tunnel.process.kill();
@@ -580,10 +674,18 @@ function stopPublicTunnel(serverId, { onStatus = null, onLog = null } = {}) {
     active: false,
     connecting: false,
     address: '',
+    publicDomain: '',
+    rawAddress: '',
+    registryActive: false,
     provider: '',
     note: '',
-    process: null
+    process: null,
+    heartbeatTimer: null,
+    ownerId: ''
   };
+  if (prevPublicDomain) {
+    unpublishPeakDomain({ domain: prevPublicDomain, ownerId: prevOwnerId }).catch(() => {});
+  }
   if (hadTunnel) {
     appendServerLog(rt, 'SYSTEM', 'Zamknięto publiczny tunel TCP.', onLog);
     if (onStatus) onStatus(serializeRuntimeStatus(rt));
@@ -591,14 +693,20 @@ function stopPublicTunnel(serverId, { onStatus = null, onLog = null } = {}) {
   return serializeRuntimeStatus(rt).tunnel;
 }
 
-async function startPublicTunnel({ server, onStatus = null, onLog = null, onTunnel = null }) {
+async function startPublicTunnel({
+  server,
+  ownerId = '',
+  onStatus = null,
+  onLog = null,
+  onTunnel = null
+}) {
   const rt = getOrCreateRuntime(server.id);
   if (rt.tunnel.active && rt.tunnel.address) {
     return serializeRuntimeStatus(rt).tunnel;
   }
   stopPublicTunnel(server.id);
 
-  const port = Number(server.port) || 25565;
+  const port = Number(rt.bindPort || server.port) || 25565;
   rt.tunnel.connecting = true;
   if (onStatus) onStatus(serializeRuntimeStatus(rt));
   appendServerLog(rt, 'SYSTEM', `Otwieranie darmowego tunelu publicznego TCP dla portu ${port}...`, onLog);
@@ -651,16 +759,70 @@ async function startPublicTunnel({ server, onStatus = null, onLog = null, onTunn
       if (match && match[1] && !resolved) {
         resolved = true;
         clearTimeout(timer);
-        rt.tunnel.connecting = false;
-        rt.tunnel.active = true;
-        rt.tunnel.address = match[1];
-        rt.tunnel.provider = 'Pinggy Free TCP';
-        rt.tunnel.note = 'Sesja darmowa ~60 min (po wygaśnięciu kliknij ponownie)';
-        appendServerLog(rt, 'SYSTEM', `Publiczny adres tunelu gotowy: ${match[1]}`, onLog);
-        const payload = serializeRuntimeStatus(rt);
-        if (onTunnel) onTunnel({ serverId: server.id, tunnel: payload.tunnel });
-        if (onStatus) onStatus(payload);
-        resolve(payload.tunnel);
+        const rawAddr = match[1];
+        void (async () => {
+          let publicDomain = server.peakDomain || '';
+          let registryActive = false;
+          let claimedRecord = null;
+          try {
+            const pub = await claimAndPublishPeakDomain({
+              domain: server.peakDomain,
+              slug: server.slug,
+              rawAddress: rawAddr,
+              serverName: server.name,
+              mcVersion: server.mcVersion,
+              loader: server.loader,
+              ownerId
+            });
+            publicDomain = pub.domain;
+            registryActive = Boolean(pub.registryActive);
+            claimedRecord = pub.record;
+          } catch {
+            registryActive = false;
+          }
+
+          if (rt.tunnel.process !== child) {
+            if (registryActive && publicDomain) {
+              unpublishPeakDomain({ domain: publicDomain, ownerId }).catch(() => {});
+            }
+            return;
+          }
+
+          rt.tunnel.connecting = false;
+          rt.tunnel.active = true;
+          rt.tunnel.rawAddress = rawAddr;
+          rt.tunnel.publicDomain = registryActive ? publicDomain : '';
+          rt.tunnel.address = registryActive ? publicDomain : rawAddr;
+          rt.tunnel.registryActive = registryActive;
+          rt.tunnel.ownerId = ownerId;
+          rt.tunnel.provider = registryActive ? 'Peak Global .peak' : 'Pinggy Free TCP';
+          rt.tunnel.note = registryActive
+            ? `Publiczna domena .peak aktywna (relay TCP: ${rawAddr})`
+            : 'Sesja darmowa ~60 min (po wygaśnięciu kliknij ponownie)';
+
+          if (registryActive && claimedRecord) {
+            if (rt.tunnel.heartbeatTimer) clearInterval(rt.tunnel.heartbeatTimer);
+            const hb = setInterval(() => {
+              if (!rt.tunnel.active || rt.tunnel.process !== child) return;
+              publishPeakRecord({ ...claimedRecord, ts: Date.now() }).catch(() => {});
+            }, 8 * 60 * 1000);
+            if (typeof hb.unref === 'function') hb.unref();
+            rt.tunnel.heartbeatTimer = hb;
+            appendServerLog(
+              rt,
+              'SYSTEM',
+              `Publiczna domena .peak aktywna: ${publicDomain} (relay: ${rawAddr})`,
+              onLog
+            );
+          } else {
+            appendServerLog(rt, 'SYSTEM', `Publiczny adres tunelu gotowy: ${rawAddr}`, onLog);
+          }
+
+          const payload = serializeRuntimeStatus(rt);
+          if (onTunnel) onTunnel({ serverId: server.id, tunnel: payload.tunnel });
+          if (onStatus) onStatus(payload);
+          resolve(payload.tunnel);
+        })();
       }
     };
 
@@ -683,9 +845,17 @@ async function startPublicTunnel({ server, onStatus = null, onLog = null, onTunn
       if (!resolved) {
         fail('Tunel publiczny został zamknięty przed przydzieleniem adresu.');
       } else if (rt.tunnel.active) {
+        if (rt.tunnel.heartbeatTimer) clearInterval(rt.tunnel.heartbeatTimer);
+        if (rt.tunnel.registryActive && rt.tunnel.publicDomain) {
+          unpublishPeakDomain({ domain: rt.tunnel.publicDomain, ownerId: rt.tunnel.ownerId }).catch(() => {});
+        }
         rt.tunnel.active = false;
         rt.tunnel.connecting = false;
         rt.tunnel.address = '';
+        rt.tunnel.publicDomain = '';
+        rt.tunnel.rawAddress = '';
+        rt.tunnel.registryActive = false;
+        rt.tunnel.heartbeatTimer = null;
         rt.tunnel.process = null;
         appendServerLog(rt, 'WARN', 'Sesja tunelu publicznego zakończyła się.', onLog);
         const payload = serializeRuntimeStatus(rt);
@@ -715,15 +885,15 @@ function buildPeakInvitePayload({ server, dataDir }) {
   const lanIp = getLocalLanIp();
   const port = Number(server.port) || 25565;
 
-  const preferredAddress = rt.tunnel.active && rt.tunnel.address
-    ? rt.tunnel.address
-    : `${lanIp}:${port}`;
+  const activeRaw = rt.tunnel.active ? rt.tunnel.rawAddress || rt.tunnel.address : '';
+  const activeDomain = rt.tunnel.active ? rt.tunnel.publicDomain || server.peakDomain : server.peakDomain;
+  const preferredAddress = activeRaw || `${lanIp}:${port}`;
 
   return {
     format: 'peak-server-v1',
     createdAt: new Date().toISOString(),
     serverName: server.name,
-    peakDomain: server.peakDomain,
+    peakDomain: activeDomain,
     slug: server.slug,
     mcVersion: server.mcVersion,
     loader: server.loader,
@@ -731,7 +901,7 @@ function buildPeakInvitePayload({ server, dataDir }) {
     port,
     onlineMode: Boolean(server.onlineMode),
     address: preferredAddress,
-    tunnelAddress: rt.tunnel.active ? rt.tunnel.address : '',
+    tunnelAddress: activeRaw,
     lanAddress: `${lanIp}:${port}`,
     localAddress: `127.0.0.1:${port}`,
     mods: mods.map((m) => {
@@ -775,6 +945,7 @@ function parsePeakInviteFile(filePath) {
 
 module.exports = {
   getLocalLanIp,
+  findFreeLoopbackPort,
   readServerProperties,
   writeServerProperties,
   writeEulaFile,

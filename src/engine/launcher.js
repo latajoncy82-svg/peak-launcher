@@ -12,6 +12,21 @@ const { ensureVersionJson } = require('./versions');
 let activeGameProcess = null;
 let activeProfileRunningId = null;
 
+function resolvePeakDnsJarPath() {
+  const candidates = [];
+  if (process.resourcesPath) {
+    candidates.push(path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'peak-dns.jar'));
+    candidates.push(path.join(process.resourcesPath, 'assets', 'peak-dns.jar'));
+  }
+  candidates.push(path.resolve(__dirname, '../../assets/peak-dns.jar'));
+  for (const candidate of candidates) {
+    if (candidate && fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function evaluateRules(rules, features = {}) {
   if (!Array.isArray(rules) || rules.length === 0) return true;
 
@@ -224,6 +239,7 @@ function buildLaunchSpec({
   const mcVersion = parentJson.id;
   const effectiveId = merged.effectiveId;
   const javaMajor = merged.javaVersion?.majorVersion || 8;
+  const peakDnsJarPath = javaMajor >= 18 ? resolvePeakDnsJarPath() : null;
   const nativesDir = path.join(paths.versionsDir, effectiveId, 'natives');
   const clientJarPath = path.join(paths.versionsDir, mcVersion, `${mcVersion}.jar`);
 
@@ -231,6 +247,12 @@ function buildLaunchSpec({
   const nativeJarsToExtract = [];
   const classpathEntries = [];
   const seenCp = new Set();
+
+  if (peakDnsJarPath) {
+    const dnsKey = peakDnsJarPath.toLowerCase();
+    seenCp.add(dnsKey);
+    classpathEntries.push(peakDnsJarPath);
+  }
 
   for (const lib of merged.libraries || []) {
     if (!evaluateRules(lib.rules)) continue;
@@ -291,7 +313,7 @@ function buildLaunchSpec({
     classpath_separator: path.delimiter,
     classpath,
     launcher_name: 'PeakLauncher',
-    launcher_version: '1.5.0',
+    launcher_version: '1.5.1',
     resolution_width: String(settings.width || 1280),
     resolution_height: String(settings.height || 720)
   };
@@ -314,7 +336,7 @@ function buildLaunchSpec({
     jvmArgs = [
       `-Djava.library.path=${nativesDir}`,
       `-Dminecraft.launcher.brand=PeakLauncher`,
-      `-Dminecraft.launcher.version=1.5.0`,
+      `-Dminecraft.launcher.version=1.5.1`,
       '-cp',
       classpath
     ];
@@ -383,6 +405,8 @@ function buildLaunchSpec({
     effectiveId,
     mcVersion,
     javaMajor,
+    peakDnsJarPath,
+    peakDnsActive: Boolean(peakDnsJarPath),
     nativesDir,
     clientJarPath,
     clientJarTask,
@@ -787,6 +811,7 @@ module.exports = {
   getLibDedupKey,
   resolveLibraryDownload,
   mergeVersionChain,
+  resolvePeakDnsJarPath,
   buildLaunchSpec,
   ensureNativesTree,
   prepareProfileFiles,

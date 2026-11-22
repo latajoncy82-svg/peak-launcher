@@ -67,6 +67,8 @@ function createDefaultConfig() {
     ],
     activeProfileId: 'peak-fabric-latest',
     activeServerId: 'srv-szczyt',
+    peakOwnerId: crypto.randomBytes(8).toString('hex'),
+    peakRoutes: [],
     servers: [
       {
         id: 'srv-szczyt',
@@ -178,6 +180,13 @@ class Store {
         }
         if (!merged.servers.some((s) => s.id === merged.activeServerId)) {
           merged.activeServerId = merged.servers[0].id;
+        }
+        if (!Array.isArray(merged.peakRoutes)) {
+          merged.peakRoutes = [];
+        }
+        if (!merged.peakOwnerId) {
+          merged.peakOwnerId = defaults.peakOwnerId;
+          this._saveData(merged);
         }
         return merged;
       }
@@ -626,6 +635,74 @@ class Store {
     }
     this.save();
     return this.getState();
+  }
+
+  listPeakRoutes() {
+    return Array.isArray(this.data.peakRoutes) ? this.data.peakRoutes : [];
+  }
+
+  getPeakOwnerId() {
+    if (!this.data.peakOwnerId) {
+      this.data.peakOwnerId = crypto.randomBytes(8).toString('hex');
+      this.save();
+    }
+    return this.data.peakOwnerId;
+  }
+
+  savePeakRoute(payload = {}) {
+    if (!Array.isArray(this.data.peakRoutes)) this.data.peakRoutes = [];
+
+    const rawDomain = String(payload.domain || payload.peakDomain || '').trim().toLowerCase().replace(/\.+$/, '');
+    const stripped = rawDomain.endsWith('.peak') ? rawDomain.slice(0, -5) : rawDomain;
+    const slug = sanitizePeakSlug(stripped);
+    const domain = `${slug}.peak`;
+
+    let host = String(payload.targetHost || '').trim();
+    let port = Number(payload.targetPort) || 25565;
+    if (host.includes(':') && !host.startsWith('[')) {
+      const idx = host.lastIndexOf(':');
+      const maybePort = Number(host.slice(idx + 1));
+      if (maybePort >= 1 && maybePort <= 65535) {
+        port = maybePort;
+        host = host.slice(0, idx).trim();
+      }
+    }
+    if (!host) {
+      throw new Error('Podaj docelowy adres IP lub hosta (np. 192.168.1.44:25565 lub tunnel.pinggy.link:12345).');
+    }
+    port = Math.max(1, Math.min(65535, Math.round(port)));
+
+    const cleanName = String(payload.name || '').trim() || domain;
+    const entry = {
+      domain,
+      slug,
+      name: cleanName,
+      targetHost: host,
+      targetPort: port,
+      updatedAt: new Date().toISOString()
+    };
+
+    const existingIdx = this.data.peakRoutes.findIndex(
+      (r) => String(r.domain || '').toLowerCase() === domain
+    );
+    if (existingIdx >= 0) {
+      this.data.peakRoutes[existingIdx] = { ...this.data.peakRoutes[existingIdx], ...entry };
+    } else {
+      this.data.peakRoutes.push(entry);
+    }
+
+    this.save();
+    return entry;
+  }
+
+  deletePeakRoute(domain) {
+    if (!Array.isArray(this.data.peakRoutes)) this.data.peakRoutes = [];
+    const target = String(domain || '').trim().toLowerCase().replace(/\.+$/, '');
+    this.data.peakRoutes = this.data.peakRoutes.filter(
+      (r) => String(r.domain || '').toLowerCase() !== target
+    );
+    this.save();
+    return this.listPeakRoutes();
   }
 }
 

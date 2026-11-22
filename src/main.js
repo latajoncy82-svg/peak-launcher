@@ -4,8 +4,10 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
 
 const { Store, getSystemMemoryInfo } = require('./store');
 const { ensureDataTree, ensureDir, getPaths, getProfileDirs, getServerDirs } = require('./engine/paths');
-const { getManifest, ensureVersionJson, listInstalledVersions } = require('./engine/versions');
+const { getManifest, ensureVersionJson, listInstalledVersions, estimateJavaMajor } = require('./engine/versions');
 const { upsertServerEntry } = require('./engine/nbtServers');
+const { lookupPublicPeakDomain } = require('./engine/peakDirectory');
+const { peakRouter } = require('./engine/peakRouter');
 const {
   MANAGED_MAJORS,
   detectInstalledJavas,
@@ -123,6 +125,50 @@ function handleIpc(channel, handler) {
   });
 }
 
+function syncPeakRouterRoutes() {
+  if (!store) return;
+  const localServers = store.listServers() || [];
+  const takenDomains = new Set();
+  const routes = [];
+
+  for (const s of localServers) {
+    const rt = getServerRuntimeStatus(s.id);
+    const domain = String(s.peakDomain || '').toLowerCase();
+    if (domain) takenDomains.add(domain);
+    routes.push({
+      domain,
+      name: s.name || domain,
+      serverId: s.id,
+      targetHost: '127.0.0.1',
+      targetPort: Number(rt.bindPort || s.port) || 25565,
+      running: rt.state === 'online',
+      starting: rt.state === 'preparing' || rt.state === 'starting',
+      mcVersion: s.mcVersion,
+      maxPlayers: Number(s.maxPlayers) || 10,
+      isExternal: false,
+      isDefault: Number(s.port) === 25565 && rt.state === 'online'
+    });
+  }
+
+  for (const r of store.listPeakRoutes() || []) {
+    const domain = String(r.domain || '').toLowerCase();
+    if (!domain || takenDomains.has(domain)) continue;
+    routes.push({
+      domain,
+      name: r.name || domain,
+      targetHost: r.targetHost,
+      targetPort: Number(r.targetPort) || 25565,
+      running: true,
+      starting: false,
+      maxPlayers: 20,
+      isExternal: true,
+      isDefault: false
+    });
+  }
+
+  peakRouter.setRoutes(routes);
+}
+
 function buildStatePayload() {
   const state = store.getState();
   const dataDir = store.getDataDir();
@@ -143,6 +189,8 @@ function buildStatePayload() {
     systemMemory: getSystemMemoryInfo(),
     launchStatus: getLaunchStatus(),
     serverStatuses: getAllServerStatuses(),
+    peakRoutes: store.listPeakRoutes(),
+    peakRouterStatus: peakRouter.getStatus(),
     lanIp: getLocalLanIp(),
     installedVersions: Array.from(listInstalledVersions(dataDir)),
     installedFabric: listInstalledFabric(dataDir)
@@ -576,7 +624,12 @@ function registerIpcHandlers() {
     const dirs = getServerDirs(store.getDataDir(), server.id);
     ensureDir(dirs.serverDir);
     ensureDir(dirs.modsDir);
-    writeServerProperties(dirs.propertiesPath, server);
+    const rt = getServerRuntimeStatus(server.id);
+    const propsOpts =
+      rt.state !== 'offline' && rt.bindPort && rt.bindPort !== Number(server.port)
+        ? { bindHost: '127.0.0.1', bindPort: rt.bindPort }
+        : {};
+    writeServerProperties(dirs.propertiesPath, server, propsOpts);
     writeEulaFile(dirs.eulaPath, Boolean(server.eulaAccepted));
     return dirs;
   };
@@ -602,6 +655,7 @@ function registerIpcHandlers() {
   handleIpc('hosting:create', (_e, payload) => {
     const server = store.createServer(payload || {});
     syncServerConfigFiles(server);
+    syncPeakRouterRoutes();
     return { server, state: buildStatePayload() };
   });
 
@@ -609,6 +663,7 @@ function registerIpcHandlers() {
     const prev = resolveServerTarget(serverId);
     const server = store.updateServer(prev.id, patch || {});
     syncServerConfigFiles(server);
+    syncPeakRouterRoutes();
     const runtimeStatus = getServerRuntimeStatus(server.id);
     return {
       server,
@@ -629,7 +684,10 @@ function registerIpcHandlers() {
     const rt = getServerRuntimeStatus(server.id);
     if (rt.state !== 'offline') {
       await stopServer(server.id, {
-        onStatus: (s) => sendToRenderer('hosting:status', s),
+        onStatus: (s) => {
+          syncPeakRouterRoutes();
+          sendToRenderer('hosting:status', s);
+        },
         onLog: (entry) => sendToRenderer('hosting:log', entry)
       });
     }
@@ -640,6 +698,7 @@ function registerIpcHandlers() {
         fs.rmSync(dirs.serverDir, { recursive: true, force: true });
       }
     }
+    syncPeakRouterRoutes();
     return buildStatePayload();
   });
 
@@ -647,24 +706,34 @@ function registerIpcHandlers() {
     const server = resolveServerTarget(serverId);
     const state = store.getState();
     const dataDir = store.getDataDir();
-    store.updateServer(server.id, { lastStartedAt: new Date().toISOString() });
+    const updatedServer = store.updateServer(server.id, { lastStartedAt: new Date().toISOString() });
     const status = await startServer({
-      server,
+      server: updatedServer,
       settings: state.settings,
       dataDir,
+      routerListeningOn25565: Boolean(peakRouter.getStatus().listening),
       onProgress: (p) => sendToRenderer('hosting:progress', p),
       onLog: (entry) => sendToRenderer('hosting:log', entry),
-      onStatus: (s) => sendToRenderer('hosting:status', s)
+      onStatus: (s) => {
+        syncPeakRouterRoutes();
+        sendToRenderer('hosting:status', s);
+      }
     });
+    syncPeakRouterRoutes();
     return { status, state: buildStatePayload() };
   });
 
   handleIpc('hosting:stop', async (_e, serverId) => {
     const server = resolveServerTarget(serverId);
-    return stopServer(server.id, {
-      onStatus: (s) => sendToRenderer('hosting:status', s),
+    const status = await stopServer(server.id, {
+      onStatus: (s) => {
+        syncPeakRouterRoutes();
+        sendToRenderer('hosting:status', s);
+      },
       onLog: (entry) => sendToRenderer('hosting:log', entry)
     });
+    syncPeakRouterRoutes();
+    return status;
   });
 
   handleIpc('hosting:restart', async (_e, serverId) => {
@@ -675,10 +744,15 @@ function registerIpcHandlers() {
       server,
       settings: state.settings,
       dataDir,
+      routerListeningOn25565: Boolean(peakRouter.getStatus().listening),
       onProgress: (p) => sendToRenderer('hosting:progress', p),
       onLog: (entry) => sendToRenderer('hosting:log', entry),
-      onStatus: (s) => sendToRenderer('hosting:status', s)
+      onStatus: (s) => {
+        syncPeakRouterRoutes();
+        sendToRenderer('hosting:status', s);
+      }
     });
+    syncPeakRouterRoutes();
     return { status, state: buildStatePayload() };
   });
 
@@ -701,6 +775,7 @@ function registerIpcHandlers() {
     const server = resolveServerTarget(serverId);
     return startPublicTunnel({
       server,
+      ownerId: store.getPeakOwnerId(),
       onStatus: (s) => sendToRenderer('hosting:status', s),
       onLog: (entry) => sendToRenderer('hosting:log', entry),
       onTunnel: (t) => sendToRenderer('hosting:tunnel', t)
@@ -849,7 +924,8 @@ function registerIpcHandlers() {
     if (!profile) throw new Error('Nie znaleziono profilu gry.');
     const profileDirs = getProfileDirs(dataDir, profile.id);
     const serversDatPath = path.join(profileDirs.instanceDir, 'servers.dat');
-    const ip = String(customAddress || `127.0.0.1:${server.port}`).trim();
+    const routerOn = Boolean(peakRouter.getStatus().listening);
+    const ip = String(customAddress || (routerOn ? server.peakDomain : `127.0.0.1:${server.port}`)).trim();
     const entries = upsertServerEntry(serversDatPath, {
       name: `${server.name} (${server.peakDomain})`,
       ip,
@@ -885,9 +961,24 @@ function registerIpcHandlers() {
       }
     }
 
+    let profileJavaMajor = estimateJavaMajor(profile.mcVersion);
+    try {
+      const vjPath = path.join(getPaths(dataDir).versionsDir, profile.mcVersion, `${profile.mcVersion}.json`);
+      if (fs.existsSync(vjPath)) {
+        const vj = JSON.parse(fs.readFileSync(vjPath, 'utf8'));
+        if (vj?.javaVersion?.majorVersion) profileJavaMajor = vj.javaVersion.majorVersion;
+      }
+    } catch {}
+
+    const rt = getServerRuntimeStatus(server.id);
+    const routerOn = Boolean(peakRouter.getStatus().listening);
+    const targetAddr =
+      routerOn && profileJavaMajor >= 18
+        ? server.peakDomain
+        : `127.0.0.1:${rt.bindPort || server.port}`;
+
     const profileDirs = getProfileDirs(dataDir, profile.id);
     const serversDatPath = path.join(profileDirs.instanceDir, 'servers.dat');
-    const targetAddr = `127.0.0.1:${server.port}`;
     upsertServerEntry(serversDatPath, {
       name: `${server.name} (${server.peakDomain})`,
       ip: targetAddr,
@@ -993,11 +1084,33 @@ function registerIpcHandlers() {
       }
     }
 
+    if (invite.peakDomain && invite.address) {
+      let targetHost = String(invite.address).trim();
+      let targetPort = Number(invite.port) || 25565;
+      const colonIdx = targetHost.lastIndexOf(':');
+      if (colonIdx > 0 && !targetHost.startsWith('[')) {
+        const parsedPort = Number(targetHost.slice(colonIdx + 1));
+        if (parsedPort >= 1 && parsedPort <= 65535) {
+          targetPort = parsedPort;
+          targetHost = targetHost.slice(0, colonIdx).trim();
+        }
+      }
+      store.savePeakRoute({
+        domain: invite.peakDomain,
+        targetHost,
+        targetPort,
+        name: invite.serverName || invite.peakDomain
+      });
+      syncPeakRouterRoutes();
+    }
+
     const profileDirs = getProfileDirs(dataDir, profile.id);
     const serversDatPath = path.join(profileDirs.instanceDir, 'servers.dat');
+    const serverAddr =
+      peakRouter.getStatus().listening && invite.peakDomain ? invite.peakDomain : invite.address;
     upsertServerEntry(serversDatPath, {
       name: `${invite.serverName || invite.peakDomain}`,
-      ip: invite.address,
+      ip: serverAddr,
       acceptTextures: 1
     });
 
@@ -1010,6 +1123,20 @@ function registerIpcHandlers() {
       state: buildStatePayload()
     };
   });
+
+  handleIpc('hosting:savePeakRoute', (_e, payload) => {
+    const route = store.savePeakRoute(payload || {});
+    syncPeakRouterRoutes();
+    return { route, state: buildStatePayload() };
+  });
+
+  handleIpc('hosting:deletePeakRoute', (_e, domain) => {
+    store.deletePeakRoute(domain);
+    syncPeakRouterRoutes();
+    return buildStatePayload();
+  });
+
+  handleIpc('hosting:routerStatus', () => peakRouter.getStatus());
 
   // Utilities
   handleIpc('app:openExternal', (_e, url) => {
@@ -1150,9 +1277,13 @@ function createWindow() {
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   store = new Store();
   ensureDataTree(store.getDataDir());
+  peakRouter.on('status', (st) => sendToRenderer('hosting:routerStatus', st));
+  peakRouter.setRemoteResolver((domain) => lookupPublicPeakDomain(domain));
+  syncPeakRouterRoutes();
+  await peakRouter.start(25565, '0.0.0.0');
   registerIpcHandlers();
   createWindow();
 
@@ -1168,9 +1299,10 @@ app.on('before-quit', (e) => {
   if (quitCleanupDone) return;
   const statuses = Object.values(getAllServerStatuses());
   const anyRunning = statuses.some((s) => s.state !== 'offline' || s.tunnel?.active);
-  if (!anyRunning) return;
+  const routerListening = peakRouter.getStatus().listening;
+  if (!anyRunning && !routerListening) return;
   e.preventDefault();
-  stopAllServers()
+  Promise.allSettled([stopAllServers(), peakRouter.stop()])
     .catch(() => {})
     .finally(() => {
       quitCleanupDone = true;

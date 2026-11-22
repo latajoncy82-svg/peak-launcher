@@ -1,8 +1,13 @@
 const assert = require('assert');
-const { execFileSync } = require('child_process');
+const { execFile, execFileSync } = require('child_process');
 const crypto = require('crypto');
 const fs = require('fs');
+const http = require('http');
+const net = require('net');
 const path = require('path');
+const { promisify } = require('util');
+
+const execFileAsync = promisify(execFile);
 
 const VERIFY_DIR = path.resolve(__dirname, '..', '.verify-tmp');
 process.env.PEAK_VERIFY_DIR = VERIFY_DIR;
@@ -11,7 +16,21 @@ const { Store, computeOfflineUuid, sanitizePeakSlug } = require('../src/store');
 const { getProfileDirs, getServerDirs } = require('../src/engine/paths');
 const { readServersDat, upsertServerEntry } = require('../src/engine/nbtServers');
 const { getManifest, ensureVersionJson } = require('../src/engine/versions');
-const { detectInstalledJavas, getAdoptiumReleaseInfo } = require('../src/engine/javaManager');
+const { detectInstalledJavas, findJavaForMajor, getAdoptiumReleaseInfo } = require('../src/engine/javaManager');
+const {
+  claimAndPublishPeakDomain,
+  clearDirectoryCache,
+  isAllowedPublicTarget,
+  lookupPublicPeakDomain,
+  unpublishPeakDomain
+} = require('../src/engine/peakDirectory');
+const {
+  PeakDomainRouter,
+  readVarInt,
+  encodeVarInt,
+  encodeMcString,
+  encodePacket
+} = require('../src/engine/peakRouter');
 const {
   getFabricSupportedVersions,
   getFabricLoadersForMc,
@@ -56,7 +75,7 @@ const {
   ensureAuthlibInjector,
   startLocalSkinServer
 } = require('../src/engine/skinServer');
-const { buildLaunchSpec, ensureNativesTree } = require('../src/engine/launcher');
+const { buildLaunchSpec, ensureNativesTree, resolvePeakDnsJarPath } = require('../src/engine/launcher');
 
 function assertNoPlaceholders(args, label) {
   for (const arg of args) {
@@ -491,6 +510,437 @@ async function runVerification() {
     deleteModInDirectory(srvDirs.modsDir, srvDirs.modsMetaPath, srvMods[0].fileName);
     store.deleteServer(updatedSrv.id);
     console.log('   -> Store .peak, server.properties, EULA, Fabric Server JAR, Modrinth (serwerowe), NBT servers.dat, .peak i QuickPlay OK.');
+
+    console.log('9. Testowanie prawdziwej domeny .peak (Java 21 & 25 DNS SPI + authlib-injector + PeakDomainRouter)...');
+    const peakDnsJar = resolvePeakDnsJarPath();
+    assert(peakDnsJar && fs.existsSync(peakDnsJar), 'Brak assets/peak-dns.jar');
+    const javacExe = path.join(path.dirname((await findJavaForMajor(21, dataDir))?.path || ''), 'javac.exe');
+    const probeDir = path.join(VERIFY_DIR, 'dns-probe');
+    fs.mkdirSync(probeDir, { recursive: true });
+    const probeJavaPath = path.join(probeDir, 'PeakDnsProbe.java');
+    fs.writeFileSync(
+      probeJavaPath,
+      `import java.net.InetAddress;
+public class PeakDnsProbe {
+  public static void main(String[] args) throws Exception {
+    System.out.println("SZCZYT=" + InetAddress.getByName("szczyt.peak").getHostAddress());
+    System.out.println("EKIPA=" + InetAddress.getByName("moja-ekipa.peak").getHostAddress());
+    System.out.println("LOCAL=" + InetAddress.getByName("localhost").getHostAddress());
+    System.out.println("EXT=" + InetAddress.getByName("api.modrinth.com").getHostAddress());
+  }
+}
+`,
+      'utf8'
+    );
+    execFileSync(fs.existsSync(javacExe) ? javacExe : 'javac', ['--release', '18', '-d', probeDir, probeJavaPath], {
+      windowsHide: true
+    });
+
+    const probeSkinAcc = store.getActiveAccount();
+    store.updateAccountSkin(
+      probeSkinAcc.id,
+      setAccountSkinFromPreset({ dataDir, accountId: probeSkinAcc.id, presetId: 'peak-climber' })
+    );
+    const probeAuthlibJar = await ensureAuthlibInjector(dataDir);
+    const probeSkinSrv = await startLocalSkinServer({ dataDir, accounts: store.getState().accounts });
+    let testedJavaMajors = 0;
+    try {
+      const cpSep = process.platform === 'win32' ? ';' : ':';
+      const probeCp = `${peakDnsJar}${cpSep}${probeDir}`;
+      for (const major of [21, 25]) {
+        const jInfo = await findJavaForMajor(major, dataDir);
+        if (!jInfo) continue;
+        testedJavaMajors += 1;
+        const { stdout: out } = await execFileAsync(
+          jInfo.path,
+          [
+            `-javaagent:${probeAuthlibJar}=${probeSkinSrv.apiUrl}`,
+            '-Dauthlibinjector.side=client',
+            '-cp',
+            probeCp,
+            'PeakDnsProbe'
+          ],
+          { encoding: 'utf8', windowsHide: true, timeout: 15000 }
+        );
+        assert(/SZCZYT=127\.0\.0\.1/.test(out), `[Java ${major}] szczyt.peak nie rozwiązał się do 127.0.0.1:\n${out}`);
+        assert(/EKIPA=127\.0\.0\.1/.test(out), `[Java ${major}] moja-ekipa.peak nie rozwiązał się do 127.0.0.1:\n${out}`);
+        const extMatch = out.match(/EXT=([^\r\n]+)/);
+        assert(extMatch && extMatch[1] && extMatch[1] !== '127.0.0.1', `[Java ${major}] Delegacja builtin DNS nie zadziałała:\n${out}`);
+      }
+      assert(testedJavaMajors >= 1, 'Nie znaleziono Java 21 ani Java 25 do testu DNS SPI');
+    } finally {
+      probeSkinSrv.close();
+      store.updateAccountSkin(probeSkinAcc.id, clearAccountSkin({ dataDir, accountId: probeSkinAcc.id }));
+    }
+
+    // 9b: PeakDomainRouter TCP Handshake + Status + Ping + Login Disconnect
+    const mockReceived = [];
+    const mockBackend = net.createServer((sock) => {
+      sock.on('data', (chunk) => {
+        mockReceived.push(chunk.toString('utf8'));
+        sock.write(Buffer.from('BACKEND_OK'));
+      });
+    });
+    await new Promise((resolve) => mockBackend.listen(0, '127.0.0.1', resolve));
+    const backendPort = mockBackend.address().port;
+
+    const router = new PeakDomainRouter();
+    await router.start(0, '127.0.0.1');
+    const routerPort = router.getStatus().port;
+    assert(routerPort > 0, 'PeakDomainRouter nie uruchomił się poprawnie');
+
+    router.setRoutes([
+      {
+        domain: 'alpha.peak',
+        name: 'Alpha Summit',
+        serverId: 'srv-alpha',
+        targetHost: '127.0.0.1',
+        targetPort: backendPort,
+        running: true,
+        isDefault: true
+      },
+      {
+        domain: 'beta.peak',
+        name: 'Beta Offline',
+        serverId: 'srv-beta',
+        targetHost: '127.0.0.1',
+        targetPort: 25999,
+        running: false,
+        maxPlayers: 12
+      },
+      {
+        domain: 'kolega.peak',
+        name: 'Kolega LAN',
+        targetHost: '127.0.0.1',
+        targetPort: backendPort,
+        running: true,
+        isExternal: true
+      }
+    ]);
+
+    const buildHandshake = (addr, nextState) =>
+      encodePacket(
+        0x00,
+        Buffer.concat([
+          encodeVarInt(769),
+          encodeMcString(addr),
+          Buffer.from([(routerPort >> 8) & 0xff, routerPort & 0xff]),
+          encodeVarInt(nextState)
+        ])
+      );
+
+    const readPacketsUntil = (socket, expectedCount = 1) =>
+      new Promise((resolve, reject) => {
+        let buf = Buffer.alloc(0);
+        const pkts = [];
+        const timer = setTimeout(() => {
+          socket.destroy();
+          reject(new Error('Timeout oczekiwania na pakiety z PeakDomainRouter'));
+        }, 4000);
+        socket.on('data', (chunk) => {
+          buf = Buffer.concat([buf, chunk]);
+          while (buf.length > 0) {
+            const lenInfo = readVarInt(buf, 0);
+            if (!lenInfo) break;
+            const total = lenInfo.bytesRead + lenInfo.value;
+            if (buf.length < total) break;
+            const body = buf.subarray(lenInfo.bytesRead, total);
+            buf = buf.subarray(total);
+            const idInfo = readVarInt(body, 0);
+            pkts.push({ id: idInfo.value, data: body.subarray(idInfo.bytesRead) });
+          }
+          if (pkts.length >= expectedCount) {
+            clearTimeout(timer);
+            socket.destroy();
+            resolve(pkts);
+          }
+        });
+        socket.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+
+    try {
+      // Online Forge/Fabric FML3 suffix routing
+      await new Promise((resolve, reject) => {
+        const c = net.createConnection({ host: '127.0.0.1', port: routerPort }, () => {
+          c.write(Buffer.concat([buildHandshake('alpha.peak\0FML3\0', 2), Buffer.from('TRAIL_PING')]));
+        });
+        c.once('data', (chunk) => {
+          assert(chunk.toString('utf8').includes('BACKEND_OK'), 'alpha.peak nie połączył z backendem');
+          c.destroy();
+          resolve();
+        });
+        c.once('error', reject);
+      });
+      assert(mockReceived.join('').includes('alpha.peak\0FML3\0'), 'Backend nie otrzymał surowych bajtów Handshake FML3');
+      assert(mockReceived.join('').includes('TRAIL_PING'), 'Backend nie otrzymał pipelined bajtów po Handshake');
+
+      // External .peak route
+      await new Promise((resolve, reject) => {
+        const c = net.createConnection({ host: '127.0.0.1', port: routerPort }, () => {
+          c.write(buildHandshake('kolega.peak', 2));
+        });
+        c.once('data', (chunk) => {
+          assert(chunk.toString('utf8').includes('BACKEND_OK'), 'kolega.peak nie przekierował do zewnętrznego celu');
+          c.destroy();
+          resolve();
+        });
+        c.once('error', reject);
+      });
+
+      // Default LAN fallback routing
+      await new Promise((resolve, reject) => {
+        const c = net.createConnection({ host: '127.0.0.1', port: routerPort }, () => {
+          c.write(buildHandshake('192.168.1.99', 2));
+        });
+        c.once('data', (chunk) => {
+          assert(chunk.toString('utf8').includes('BACKEND_OK'), 'Adres LAN nie przekierował do domyślnego serwera');
+          c.destroy();
+          resolve();
+        });
+        c.once('error', reject);
+      });
+
+      // Offline .peak Status + Ping/Pong
+      const pingBytes = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8]);
+      const statusPkts = await new Promise((resolve, reject) => {
+        const c = net.createConnection({ host: '127.0.0.1', port: routerPort }, () => {
+          c.write(
+            Buffer.concat([
+              buildHandshake('beta.peak', 1),
+              encodePacket(0x00),
+              encodePacket(0x01, pingBytes)
+            ])
+          );
+        });
+        readPacketsUntil(c, 2).then(resolve).catch(reject);
+      });
+      assert.strictEqual(statusPkts[0].id, 0x00, 'Brak pakietu Status Response');
+      const strLen = readVarInt(statusPkts[0].data, 0);
+      const statusJson = JSON.parse(statusPkts[0].data.subarray(strLen.bytesRead, strLen.bytesRead + strLen.value).toString('utf8'));
+      assert.strictEqual(statusJson.players.max, 12);
+      assert(statusJson.description.text.includes('beta.peak'), 'MOTD offline powinien wymieniać domenę beta.peak');
+      assert.strictEqual(statusPkts[1].id, 0x01, 'Brak pakietu Pong');
+      assert(statusPkts[1].data.equals(pingBytes), 'Pong nie zwrócił dokładnych 8 bajtów ping payloadu');
+
+      // Offline .peak Login Disconnect
+      const discPkts = await new Promise((resolve, reject) => {
+        const c = net.createConnection({ host: '127.0.0.1', port: routerPort }, () => {
+          c.write(buildHandshake('beta.peak', 2));
+        });
+        readPacketsUntil(c, 1).then(resolve).catch(reject);
+      });
+      assert.strictEqual(discPkts[0].id, 0x00, 'Brak pakietu Login Disconnect');
+      const dLen = readVarInt(discPkts[0].data, 0);
+      const discJson = JSON.parse(discPkts[0].data.subarray(dLen.bytesRead, dLen.bytesRead + dLen.value).toString('utf8'));
+      assert(discJson.text.includes('beta.peak'), 'Komunikat rozłączenia offline nie zawiera domeny beta.peak');
+
+      // Unknown .peak domain Status
+      const unkPkts = await new Promise((resolve, reject) => {
+        const c = net.createConnection({ host: '127.0.0.1', port: routerPort }, () => {
+          c.write(Buffer.concat([buildHandshake('nieznany.peak', 1), encodePacket(0x00)]));
+        });
+        readPacketsUntil(c, 1).then(resolve).catch(reject);
+      });
+      const uLen = readVarInt(unkPkts[0].data, 0);
+      const unkJson = JSON.parse(unkPkts[0].data.subarray(uLen.bytesRead, uLen.bytesRead + uLen.value).toString('utf8'));
+      assert(unkJson.description.text.includes('nieznany.peak'), 'Nieznana domena .peak powinna być opisana w Status JSON');
+    } finally {
+      await router.stop();
+      await new Promise((resolve) => mockBackend.close(resolve));
+    }
+
+    // 9c: Store peakRoutes persistence
+    const savedRoute = store.savePeakRoute({
+      domain: 'kolega',
+      targetHost: '192.168.1.44:25570',
+      name: 'Kolega LAN'
+    });
+    assert.strictEqual(savedRoute.domain, 'kolega.peak');
+    assert.strictEqual(savedRoute.targetHost, '192.168.1.44');
+    assert.strictEqual(savedRoute.targetPort, 25570);
+    assert(store.listPeakRoutes().some((r) => r.domain === 'kolega.peak'));
+    store.deletePeakRoute('kolega.peak');
+    assert(!store.listPeakRoutes().some((r) => r.domain === 'kolega.peak'));
+
+    // 9d: buildLaunchSpec Java 18+ peak-dns.jar classpath + szczyt.peak quickPlay
+    const qpPeakDomainSpec = buildLaunchSpec({
+      profile: { id: 'qp-peak', name: 'QP Peak Domain', mcVersion: '1.21.4', loader: 'vanilla' },
+      account,
+      settings,
+      dataDir,
+      javaPath: dummyJava,
+      parentJson: parent1214ForQp,
+      quickPlayServer: 'szczyt.peak'
+    });
+    const cpIndexModern = qpPeakDomainSpec.args.indexOf('-cp');
+    assert(cpIndexModern !== -1, 'Brak -cp dla 1.21.4');
+    assert(qpPeakDomainSpec.args[cpIndexModern + 1].includes('peak-dns.jar'), 'MC 1.21.4 (Java 21) musi wstrzykiwać peak-dns.jar do classpath');
+    assert(
+      qpPeakDomainSpec.args.includes('--quickPlayMultiplayer') && qpPeakDomainSpec.args.includes('szczyt.peak'),
+      'Brak --quickPlayMultiplayer szczyt.peak'
+    );
+    const cpIndexLegacy = qpLegacy.args.indexOf('-cp');
+    assert(
+      cpIndexLegacy !== -1 && !qpLegacy.args[cpIndexLegacy + 1].includes('peak-dns.jar'),
+      'MC 1.12.2 (Java 8) nie może ładować klas Java 18 peak-dns.jar'
+    );
+
+    // 9e: Global public .peak Directory + SSRF + async PeakDomainRouter + live ntfy.sh round-trip
+    assert.strictEqual(isAllowedPublicTarget('127.0.0.1', 25565), false, 'SSRF powinien odrzucić 127.0.0.1');
+    assert.strictEqual(isAllowedPublicTarget('192.168.1.44', 25565), false, 'SSRF powinien odrzucić RFC1918');
+    assert.strictEqual(isAllowedPublicTarget('szczyt.peak', 25565), false, 'SSRF powinien odrzucić pętlę .peak');
+    assert.strictEqual(isAllowedPublicTarget('auftw-81-219-156-118.run.pinggy.link', 41234), true, 'Host Pinggy musi być dozwolony');
+
+    const topicStore = new Map();
+    const mockDirHttp = http.createServer((req, res) => {
+      const urlPath = (req.url || '/').split('?')[0].replace(/^\/+/, '');
+      if (req.method === 'POST') {
+        let body = '';
+        req.on('data', (c) => (body += c.toString('utf8')));
+        req.on('end', () => {
+          const list = topicStore.get(urlPath) || [];
+          list.push(body.trim());
+          topicStore.set(urlPath, list);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{"ok":true}');
+        });
+        return;
+      }
+      if (req.method === 'GET' && urlPath.endsWith('/json')) {
+        const topic = urlPath.slice(0, -5);
+        const list = topicStore.get(topic) || [];
+        res.writeHead(200, { 'Content-Type': 'application/x-ndjson' });
+        res.end(list.map((m) => JSON.stringify({ event: 'message', message: m })).join('\n') + (list.length ? '\n' : ''));
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+    await new Promise((resolve) => mockDirHttp.listen(0, '127.0.0.1', resolve));
+    const mockDirUrl = `http://127.0.0.1:${mockDirHttp.address().port}`;
+
+    const mockRemoteBackend = net.createServer((sock) => {
+      sock.on('data', () => sock.write(Buffer.from('REMOTE_PEAK_OK')));
+    });
+    await new Promise((resolve) => mockRemoteBackend.listen(0, '127.0.0.1', resolve));
+    const mockRemotePort = mockRemoteBackend.address().port;
+
+    const remoteRouter = new PeakDomainRouter();
+    await remoteRouter.start(0, '127.0.0.1');
+    const remoteRouterPort = remoteRouter.getStatus().port;
+    remoteRouter.setRemoteResolver((d) =>
+      lookupPublicPeakDomain(d, { baseUrl: mockDirUrl, allowPrivate: true })
+    );
+    remoteRouter.setRoutes([
+      {
+        domain: 'szczyt.peak',
+        name: 'Lokalny offline',
+        serverId: 'srv-local',
+        targetHost: '127.0.0.1',
+        targetPort: 25998,
+        running: false,
+        isExternal: false
+      }
+    ]);
+
+    try {
+      clearDirectoryCache();
+      const c1 = await claimAndPublishPeakDomain({
+        domain: 'public-test.peak',
+        slug: 'public-test',
+        rawAddress: `127.0.0.1:${mockRemotePort}`,
+        serverName: 'Public Test',
+        mcVersion: '1.21.4',
+        loader: 'fabric',
+        ownerId: 'owner-aaa',
+        baseUrl: mockDirUrl,
+        allowPrivate: true
+      });
+      assert.strictEqual(c1.domain, 'public-test.peak');
+
+      // Drugi host na ten sam slug dostaje sufiks właściciela
+      const c2 = await claimAndPublishPeakDomain({
+        domain: 'public-test.peak',
+        slug: 'public-test',
+        rawAddress: `127.0.0.1:${mockRemotePort}`,
+        serverName: 'Public Test 2',
+        ownerId: 'owner-bbb',
+        baseUrl: mockDirUrl,
+        allowPrivate: true
+      });
+      assert.strictEqual(c2.domain, 'public-test-owne.peak');
+
+      // Opublikuj także szczyt.peak (przesłonięty lokalnie jako offline) -> globalny resolver musi przejąć ruch
+      await claimAndPublishPeakDomain({
+        domain: 'szczyt.peak',
+        slug: 'szczyt',
+        rawAddress: `127.0.0.1:${mockRemotePort}`,
+        serverName: 'Global Szczyt',
+        ownerId: 'owner-ccc',
+        baseUrl: mockDirUrl,
+        allowPrivate: true
+      });
+
+      const sendHsk = (addr) =>
+        encodePacket(
+          0x00,
+          Buffer.concat([
+            encodeVarInt(769),
+            encodeMcString(addr),
+            Buffer.from([(remoteRouterPort >> 8) & 0xff, remoteRouterPort & 0xff]),
+            encodeVarInt(2)
+          ])
+        );
+
+      for (const testDomain of ['public-test.peak', 'szczyt.peak']) {
+        await new Promise((resolve, reject) => {
+          const c = net.createConnection({ host: '127.0.0.1', port: remoteRouterPort }, () => {
+            c.write(sendHsk(testDomain));
+          });
+          c.once('data', (chunk) => {
+            assert(chunk.toString('utf8').includes('REMOTE_PEAK_OK'), `${testDomain} nie połączył z globalnym celem`);
+            c.destroy();
+            resolve();
+          });
+          c.once('error', reject);
+        });
+      }
+
+      await unpublishPeakDomain({ domain: 'public-test.peak', ownerId: 'owner-aaa', baseUrl: mockDirUrl });
+      const afterTombstone = await lookupPublicPeakDomain('public-test.peak', {
+        bypassCache: true,
+        baseUrl: mockDirUrl,
+        allowPrivate: true
+      });
+      assert.strictEqual(afterTombstone, null, 'Tombstone po zamknięciu tunelu powinien wyłączyć domenę');
+
+      // Prawdziwy test publikacji i odczytu w globalnym katalogu ntfy.sh
+      const liveRandDomain = `peakverify-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}.peak`;
+      await claimAndPublishPeakDomain({
+        domain: liveRandDomain,
+        slug: liveRandDomain.replace(/\.peak$/, ''),
+        rawAddress: 'relay.pinggy.link:41234',
+        serverName: 'Peak Live Verify',
+        mcVersion: '1.21.4',
+        loader: 'fabric',
+        ownerId: 'verify-suite'
+      });
+      await new Promise((r) => setTimeout(r, 1500));
+      clearDirectoryCache();
+      const liveFound = await lookupPublicPeakDomain(liveRandDomain, { bypassCache: true });
+      assert(liveFound && liveFound.targetHost === 'relay.pinggy.link' && liveFound.targetPort === 41234, 'Live globalny odczyt ntfy.sh nie zwrócił rekordu');
+      await unpublishPeakDomain({ domain: liveRandDomain, ownerId: 'verify-suite' });
+    } finally {
+      clearDirectoryCache();
+      await remoteRouter.stop();
+      await new Promise((r) => mockRemoteBackend.close(r));
+      await new Promise((r) => mockDirHttp.close(r));
+    }
+
+    console.log(`   -> Domena .peak DNS SPI (Java majors: ${testedJavaMajors}) + authlib-injector + PeakDomainRouter + globalny katalog OK.`);
 
     console.log('\nWSZYSTKIE TESTY SILNIKA ZAKOŃCZONE SUKCESEM!');
   } finally {

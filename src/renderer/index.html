@@ -505,7 +505,10 @@
               <section class="settings-card">
                 <div class="hosting-addr-grid">
                   <div class="hosting-addr-card">
-                    <span class="hosting-addr-label" data-i18n="addr_local_label">Twój adres lokalny (.peak)</span>
+                    <div class="hosting-addr-top">
+                      <span class="hosting-addr-label" data-i18n="addr_local_label">Twój adres lokalny (.peak)</span>
+                      <span id="hosting-router-badge" class="peak-router-badge active">DNS .peak: :25565</span>
+                    </div>
                     <strong id="hosting-addr-peak" class="hosting-addr-val">szczyt.peak</strong>
                     <span id="hosting-addr-loopback" class="hosting-addr-sub">127.0.0.1:25565</span>
                     <div class="hosting-addr-btns">
@@ -786,6 +789,11 @@
                   <code id="hshare-tunnel-address">Tunel wyłączony — włącz, aby wygenerować publiczny adres IP:Port</code>
                   <button id="btn-hshare-copy-tunnel" class="btn-outline" type="button" data-i18n="btn_copy">Kopiuj</button>
                 </div>
+                <div id="hshare-tunnel-raw-row" class="datadir-path-bar tunnel-raw-row hidden">
+                  <span class="tunnel-raw-label" data-i18n="hshare_raw_tcp_label">Bezpośredni TCP (bez Peak Launchera):</span>
+                  <code id="hshare-tunnel-raw"></code>
+                  <button id="btn-hshare-copy-raw" class="btn-outline" type="button" data-i18n="btn_copy">Kopiuj</button>
+                </div>
                 <p class="field-hint" data-i18n="hshare_tunnel_note">Korzysta z szyfrowanego przekierowania TCP przez OpenSSH (Pinggy Free — darmowa sesja ~60 min bez konta, odnawialna 1 kliknięciem).</p>
               </section>
 
@@ -802,6 +810,25 @@
                     <button id="btn-hosting-write-serversdat" class="btn-outline" type="button" data-i18n="btn_write_serversdat">Zapisz w servers.dat gry</button>
                   </div>
                 </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <div>
+                    <h3 data-i18n="hshare_routes_title">Rejestr domen .peak (DNS + Router gry)</h3>
+                    <p data-i18n="hshare_routes_sub">Wpisz dowolną domenę .peak bezpośrednio w Trybie Wieloosobowym Minecrafta (Java 18+). Możesz też przypisać domenę znajomego do jego IP:Port lub tunelu.</p>
+                  </div>
+                  <span id="hshare-router-pill" class="peak-router-badge active">Router :25565</span>
+                </div>
+
+                <div class="peak-routes-form">
+                  <input id="route-domain-input" class="mono-input" type="text" data-i18n-placeholder="route_domain_ph" placeholder="kolega.peak" />
+                  <input id="route-target-input" class="mono-input" type="text" data-i18n-placeholder="route_target_ph" placeholder="192.168.1.44:25565" />
+                  <input id="route-name-input" type="text" data-i18n-placeholder="route_name_ph" placeholder="Nazwa (opcjonalnie)" />
+                  <button id="btn-route-add" class="btn-accent" type="button" data-i18n="btn_route_add">Dodaj domenę</button>
+                </div>
+
+                <div id="hosting-routes-list" class="peak-routes-list"></div>
               </section>
             </div>
           </div>
@@ -996,7 +1023,7 @@
             </button>
 
             <div class="settings-sidebar-meta">
-              <span>Peak Launcher v1.5.0</span>
+              <span>Peak Launcher v1.5.1</span>
               <span>Windows x64 · MIT</span>
             </div>
           </aside>
@@ -1214,7 +1241,7 @@
                 <div class="diag-grid">
                   <div class="diag-card">
                     <span data-i18n="diag_version">Wersja launchera</span>
-                    <strong id="diag-version">v1.5.0</strong>
+                    <strong id="diag-version">v1.5.1</strong>
                   </div>
                   <div class="diag-card">
                     <span data-i18n="diag_ram">Pamięć systemu</span>

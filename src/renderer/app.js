@@ -1033,7 +1033,7 @@
     const navAccCount = $('nav-accounts-count');
     if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
 
-    if ($('diag-version')) $('diag-version').textContent = 'v1.5.0';
+    if ($('diag-version')) $('diag-version').textContent = 'v1.5.1';
     if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
     if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
     if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
@@ -1914,6 +1914,80 @@
     }
   }
 
+  function renderPeakRoutesList() {
+    const container = $('hosting-routes-list');
+    if (!container || !state.appState) return;
+    container.innerHTML = '';
+
+    const localServers = state.appState.servers || [];
+    for (const s of localServers) {
+      const rt = getServerStatusObj(s.id);
+      const row = document.createElement('div');
+      row.className = 'peak-route-row';
+      row.innerHTML = `
+        <div class="peak-route-info">
+          <span class="peak-route-domain"></span>
+          <span class="peak-route-arrow">→</span>
+          <span class="peak-route-target"></span>
+          <span class="peak-route-tag"></span>
+        </div>
+        <div class="peak-route-actions">
+          <button class="btn-outline btn-copy-route" type="button"></button>
+        </div>
+      `;
+      row.querySelector('.peak-route-domain').textContent = s.peakDomain;
+      row.querySelector('.peak-route-target').textContent = `127.0.0.1:${rt.bindPort || s.port}`;
+      row.querySelector('.peak-route-tag').textContent = t('route_badge_local');
+      const copyBtn = row.querySelector('.btn-copy-route');
+      copyBtn.textContent = t('btn_copy');
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(s.peakDomain);
+        showToast(`${t('toast_copied')} (${s.peakDomain})`, 'info');
+      });
+      container.appendChild(row);
+    }
+
+    const externalRoutes = state.appState.peakRoutes || [];
+    for (const r of externalRoutes) {
+      const row = document.createElement('div');
+      row.className = 'peak-route-row';
+      row.innerHTML = `
+        <div class="peak-route-info">
+          <span class="peak-route-domain"></span>
+          <span class="peak-route-arrow">→</span>
+          <span class="peak-route-target"></span>
+          <span class="peak-route-tag external"></span>
+        </div>
+        <div class="peak-route-actions">
+          <button class="btn-outline btn-copy-route" type="button"></button>
+          <button class="btn-danger-sm btn-del-route" type="button">✕</button>
+        </div>
+      `;
+      row.querySelector('.peak-route-domain').textContent = r.domain;
+      row.querySelector('.peak-route-target').textContent = `${r.targetHost}:${r.targetPort}`;
+      row.querySelector('.peak-route-tag').textContent = t('route_badge_external');
+      const copyBtn = row.querySelector('.btn-copy-route');
+      copyBtn.textContent = t('btn_copy');
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(r.domain);
+        showToast(`${t('toast_copied')} (${r.domain})`, 'info');
+      });
+      row.querySelector('.btn-del-route').addEventListener('click', async () => {
+        state.appState = await api.hostingDeletePeakRoute(r.domain);
+        renderHostingView();
+        showToast(t('toast_route_deleted', { domain: r.domain }), 'info');
+      });
+      container.appendChild(row);
+    }
+
+    if (externalRoutes.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'field-hint';
+      hint.textContent = t('route_empty');
+      container.appendChild(hint);
+    }
+  }
+
   function renderHostingView() {
     if (!state.appState) return;
     renderHostingNavDot();
@@ -1989,24 +2063,49 @@
     $('btn-hosting-send-cmd').disabled = isOffline;
 
     const lanIp = state.appState.lanIp || '127.0.0.1';
+    const routerSt = state.appState.peakRouterStatus || { listening: false, port: 25565 };
+    for (const badge of [$('hosting-router-badge'), $('hshare-router-pill')]) {
+      if (!badge) continue;
+      badge.classList.toggle('active', Boolean(routerSt.listening));
+      badge.classList.toggle('inactive', !routerSt.listening);
+      badge.textContent = routerSt.listening
+        ? t('router_active_badge', { port: routerSt.port || 25565 })
+        : t('router_inactive_badge');
+    }
+
     $('hosting-addr-peak').textContent = activeSrv.peakDomain;
-    $('hosting-addr-loopback').textContent = `127.0.0.1:${activeSrv.port}`;
+    $('hosting-addr-loopback').textContent = routerSt.listening
+      ? t('addr_peak_direct_hint', { port: rt.bindPort || activeSrv.port })
+      : `127.0.0.1:${activeSrv.port}`;
     $('hosting-addr-lan').textContent = `${lanIp}:${activeSrv.port}`;
+    renderPeakRoutesList();
 
     const tun = rt.tunnel || {};
-    if (tun.active && tun.address) {
-      $('hosting-addr-tunnel').textContent = tun.address;
-      $('hosting-addr-tunnel-sub').textContent = tun.provider || 'Pinggy TCP';
+    const rawRow = $('hshare-tunnel-raw-row');
+    if (tun.active && (tun.publicDomain || tun.address)) {
+      const displayTunnelAddr = tun.publicDomain || tun.address;
+      $('hosting-addr-tunnel').textContent = displayTunnelAddr;
+      $('hosting-addr-tunnel-sub').textContent = tun.registryActive
+        ? t('addr_tunnel_peak_live')
+        : tun.provider || 'Pinggy TCP';
       $('btn-hosting-toggle-tunnel-quick').textContent = t('btn_disable_tunnel');
       $('btn-copy-addr-tunnel').classList.remove('hidden');
-      $('hshare-tunnel-address').textContent = tun.address;
+      $('hshare-tunnel-address').textContent = displayTunnelAddr;
       $('btn-hosting-tunnel-toggle').textContent = t('btn_disable_tunnel');
+      if (rawRow) {
+        const showRaw = Boolean(tun.registryActive && tun.rawAddress);
+        rawRow.classList.toggle('hidden', !showRaw);
+        if (showRaw && $('hshare-tunnel-raw')) {
+          $('hshare-tunnel-raw').textContent = tun.rawAddress;
+        }
+      }
     } else if (tun.connecting) {
       $('hosting-addr-tunnel').textContent = t('tunnel_connecting');
       $('btn-hosting-toggle-tunnel-quick').textContent = t('tunnel_connecting');
       $('btn-copy-addr-tunnel').classList.add('hidden');
       $('hshare-tunnel-address').textContent = t('tunnel_connecting');
       $('btn-hosting-tunnel-toggle').textContent = t('tunnel_connecting');
+      if (rawRow) rawRow.classList.add('hidden');
     } else {
       $('hosting-addr-tunnel').textContent = t('tunnel_off');
       $('hosting-addr-tunnel-sub').textContent = t('addr_tunnel_sub');
@@ -2014,6 +2113,7 @@
       $('btn-copy-addr-tunnel').classList.add('hidden');
       $('hshare-tunnel-address').textContent = t('tunnel_off');
       $('btn-hosting-tunnel-toggle').textContent = t('btn_enable_tunnel');
+      if (rawRow) rawRow.classList.add('hidden');
     }
 
     renderHostingConsole(activeSrv.id);
@@ -3043,8 +3143,10 @@
     const copyLocal = () => {
       const srv = getActiveServer();
       if (!srv) return;
-      navigator.clipboard.writeText(`127.0.0.1:${srv.port}`);
-      showToast(`${t('toast_copied')} (127.0.0.1:${srv.port})`, 'info');
+      const routerOn = Boolean(state.appState?.peakRouterStatus?.listening);
+      const addr = routerOn ? srv.peakDomain : `127.0.0.1:${srv.port}`;
+      navigator.clipboard.writeText(addr);
+      showToast(`${t('toast_copied')} (${addr})`, 'info');
     };
     $('btn-hosting-copy-domain').addEventListener('click', copyLocal);
     $('btn-copy-addr-local').addEventListener('click', copyLocal);
@@ -3056,13 +3158,22 @@
     const copyTunnel = () => {
       const srv = getActiveServer();
       if (!srv) return;
-      const addr = getServerStatusObj(srv.id).tunnel?.address;
+      const tun = getServerStatusObj(srv.id).tunnel;
+      const addr = tun?.publicDomain || tun?.address;
       if (!addr) return;
       navigator.clipboard.writeText(addr);
       showToast(`${t('toast_copied')} (${addr})`, 'info');
     };
     $('btn-copy-addr-tunnel').addEventListener('click', copyTunnel);
     $('btn-hshare-copy-tunnel').addEventListener('click', copyTunnel);
+    $('btn-hshare-copy-raw')?.addEventListener('click', () => {
+      const srv = getActiveServer();
+      if (!srv) return;
+      const raw = getServerStatusObj(srv.id).tunnel?.rawAddress;
+      if (!raw) return;
+      navigator.clipboard.writeText(raw);
+      showToast(`${t('toast_copied')} (${raw})`, 'info');
+    });
 
     const toggleTunnelHandler = async () => {
       const srv = getActiveServer();
@@ -3090,7 +3201,12 @@
       if (!srv) return;
       try {
         const rt = getServerStatusObj(srv.id);
-        const customAddr = rt.tunnel?.active && rt.tunnel?.address ? rt.tunnel.address : `127.0.0.1:${srv.port}`;
+        const routerOn = Boolean(state.appState?.peakRouterStatus?.listening);
+        const customAddr = routerOn
+          ? (rt.tunnel?.active && rt.tunnel?.publicDomain ? rt.tunnel.publicDomain : srv.peakDomain)
+          : rt.tunnel?.active && (rt.tunnel?.rawAddress || rt.tunnel?.address)
+            ? rt.tunnel.rawAddress || rt.tunnel.address
+            : `127.0.0.1:${srv.port}`;
         const res = await api.hostingAddToServersDat(srv.id, profileId || null, customAddr);
         state.appState = res.state;
         showToast(t('toast_added_serversdat', { domain: srv.peakDomain }), 'success');
@@ -3385,6 +3501,45 @@
       }
     });
 
+    const submitPeakRoute = async () => {
+      const domainEl = $('route-domain-input');
+      const targetEl = $('route-target-input');
+      const nameEl = $('route-name-input');
+      const domain = domainEl?.value.trim() || '';
+      const targetHost = targetEl?.value.trim() || '';
+      const name = nameEl?.value.trim() || '';
+      if (!domain || !targetHost) {
+        showToast(`${t('route_domain_ph')} / ${t('route_target_ph')}`, 'error');
+        return;
+      }
+      try {
+        const res = await api.hostingSavePeakRoute({ domain, targetHost, name });
+        state.appState = res.state;
+        if (domainEl) domainEl.value = '';
+        if (targetEl) targetEl.value = '';
+        if (nameEl) nameEl.value = '';
+        renderHostingView();
+        showToast(
+          t('toast_route_saved', {
+            domain: res.route.domain,
+            target: `${res.route.targetHost}:${res.route.targetPort}`
+          }),
+          'success'
+        );
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    };
+    $('btn-route-add')?.addEventListener('click', submitPeakRoute);
+    for (const elId of ['route-domain-input', 'route-target-input', 'route-name-input']) {
+      $(elId)?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          submitPeakRoute();
+        }
+      });
+    }
+
     api.onHostingStatus((st) => {
       if (!st || !st.serverId) return;
       state.hostingStatuses[st.serverId] = st;
@@ -3419,6 +3574,10 @@
       state.hostingStatuses[payload.serverId] = { ...cur, tunnel: payload.tunnel };
       if (state.activeView === 'hosting') renderHostingView();
     });
+    api.onHostingRouterStatus((st) => {
+      if (state.appState) state.appState.peakRouterStatus = st;
+      if (state.activeView === 'hosting') renderHostingView();
+    });
   }
 
   async function init() {
@@ -3426,7 +3585,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.5.0 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.5.1 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

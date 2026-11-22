@@ -153,10 +153,14 @@ contextBridge.exposeInMainWorld('peakAPI', {
     invoke('hosting:joinServer', { serverId, profileId }),
   hostingExportPeakFile: (serverId) => invoke('hosting:exportPeakFile', serverId),
   hostingImportPeakFile: (payload) => invoke('hosting:importPeakFile', payload),
+  hostingSavePeakRoute: (payload) => invoke('hosting:savePeakRoute', payload),
+  hostingDeletePeakRoute: (domain) => invoke('hosting:deletePeakRoute', domain),
+  hostingGetRouterStatus: () => invoke('hosting:routerStatus'),
   onHostingStatus: (cb) => subscribe('hosting:status', cb),
   onHostingLog: (cb) => subscribe('hosting:log', cb),
   onHostingProgress: (cb) => subscribe('hosting:progress', cb),
   onHostingTunnel: (cb) => subscribe('hosting:tunnel', cb),
+  onHostingRouterStatus: (cb) => subscribe('hosting:routerStatus', cb),
 
   // System utilities
   openExternal: (url) => invoke('app:openExternal', url),
