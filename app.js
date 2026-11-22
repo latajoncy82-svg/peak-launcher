@@ -14,7 +14,7 @@
   const state = {
     releases: [],
     source: 'fallback',
-    latestTag: 'v1.4.1'
+    latestTag: 'v1.5.0'
   };
 
   const el = {
@@ -42,6 +42,7 @@
       light: document.getElementById('preview-img-light'),
       mods: document.getElementById('preview-img-mods'),
       skins: document.getElementById('preview-img-skins'),
+      hosting: document.getElementById('preview-img-hosting'),
       java: document.getElementById('preview-img-java')
     },
 
@@ -209,12 +210,12 @@
   }
 
   function formatShortVer(tag) {
-    return String(tag || 'v1.4.1').replace(/^v/i, '').split('.').slice(0, 2).join('.') || '1.4';
+    return String(tag || 'v1.5.0').replace(/^v/i, '').split('.').slice(0, 2).join('.') || '1.5';
   }
 
   function populateHeroDownload(latest) {
     if (!latest) return;
-    const tag = latest.tag || 'v1.4.1';
+    const tag = latest.tag || 'v1.5.0';
     state.latestTag = tag;
     const installer = latest.assets && latest.assets.installer;
     const portable = latest.assets && latest.assets.portable;
@@ -269,7 +270,7 @@
 
       const tagSpan = document.createElement('span');
       tagSpan.className = 'release-tag';
-      tagSpan.textContent = rel.tag || 'v1.4.1';
+      tagSpan.textContent = rel.tag || 'v1.5.0';
       titleGroup.appendChild(tagSpan);
 
       const nameSpan = document.createElement('span');
