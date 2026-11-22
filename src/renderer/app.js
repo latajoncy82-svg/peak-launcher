@@ -28,6 +28,7 @@
     versionsLimit: 80,
     activeView: 'play',
     editingProfileId: null,
+    editingAccountId: null,
     activeModDetails: null,
     logs: [],
     javaDownloadingMajor: null
@@ -858,32 +859,278 @@
       const isActive = acc.id === state.appState.activeAccountId;
       const row = document.createElement('div');
       row.className = 'compact-row';
-      row.innerHTML = `
-        <div class="compact-row-meta">
-          <strong>${acc.username} ${isActive ? '· ✓' : ''}</strong>
-          <span>UUID: ${acc.uuid}</span>
-        </div>
-        <div style="display:flex;gap:6px">
-          ${!isActive ? '<button class="btn-outline" type="button" data-use>✓</button>' : ''}
-          ${state.appState.accounts.length > 1 ? `<button class="btn-danger-sm" type="button" data-del>${t('btn_remove')}</button>` : ''}
-        </div>
-      `;
-      const useBtn = row.querySelector('[data-use]');
-      if (useBtn) {
+
+      const left = document.createElement('div');
+      left.className = 'settings-account-left';
+
+      const av = document.createElement('span');
+      av.className = 'settings-account-avatar';
+      renderAvatarElement(av, acc.username);
+
+      const meta = document.createElement('div');
+      meta.className = 'compact-row-meta';
+      const title = document.createElement('strong');
+      title.textContent = isActive ? `${acc.username} · ${t('account_active_badge')}` : acc.username;
+      const sub = document.createElement('span');
+      sub.textContent = `UUID: ${acc.uuid}`;
+      meta.append(title, sub);
+
+      left.append(av, meta);
+
+      const actions = document.createElement('div');
+      actions.style.display = 'flex';
+      actions.style.gap = '6px';
+
+      if (!isActive) {
+        const useBtn = document.createElement('button');
+        useBtn.className = 'btn-outline';
+        useBtn.type = 'button';
+        useBtn.textContent = t('btn_use_account');
         useBtn.addEventListener('click', async () => {
           const res = await api.selectAccount(acc.id);
           state.appState = res.state;
           renderAll();
+          showToast(t('toast_account_switched', { name: acc.username }), 'success');
         });
+        actions.appendChild(useBtn);
       }
-      const delBtn = row.querySelector('[data-del]');
-      if (delBtn) {
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn-outline';
+      editBtn.type = 'button';
+      editBtn.textContent = t('btn_edit_account');
+      editBtn.addEventListener('click', () => {
+        openAccountsModal({ editAccount: acc, focusInput: true });
+      });
+      actions.appendChild(editBtn);
+
+      if (state.appState.accounts.length > 1) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-danger-sm';
+        delBtn.type = 'button';
+        delBtn.textContent = t('btn_remove');
         delBtn.addEventListener('click', async () => {
-          state.appState = await api.deleteAccount(acc.id);
-          renderAll();
+          try {
+            state.appState = await api.deleteAccount(acc.id);
+            renderAll();
+            showToast(t('toast_account_deleted'), 'info');
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
         });
+        actions.appendChild(delBtn);
       }
+
+      row.append(left, actions);
       accList.appendChild(row);
+    }
+  }
+
+  function closeAccountPopover() {
+    const pop = $('topbar-account-popover');
+    const btn = $('topbar-account-btn');
+    if (pop) pop.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleAccountPopover() {
+    const pop = $('topbar-account-popover');
+    const btn = $('topbar-account-btn');
+    if (!pop || !btn) return;
+    const willOpen = pop.classList.contains('hidden');
+    if (willOpen) renderAccountPopover();
+    pop.classList.toggle('hidden', !willOpen);
+    btn.setAttribute('aria-expanded', String(willOpen));
+  }
+
+  function renderAccountPopover() {
+    if (!state.appState) return;
+    const accounts = state.appState.accounts || [];
+    const activeId = state.appState.activeAccountId;
+    const countEl = $('popover-accounts-count');
+    const listEl = $('popover-accounts-list');
+    if (!listEl) return;
+
+    if (countEl) countEl.textContent = String(accounts.length);
+    listEl.innerHTML = '';
+
+    for (const acc of accounts) {
+      const isActive = acc.id === activeId;
+      const item = document.createElement('button');
+      item.type = 'button';
+      item.className = `account-popover-item ${isActive ? 'active' : ''}`;
+      item.setAttribute('role', 'menuitem');
+
+      const av = document.createElement('span');
+      av.className = 'player-avatar-mini';
+      renderAvatarElement(av, acc.username);
+
+      const meta = document.createElement('div');
+      meta.className = 'account-popover-item-meta';
+      const strong = document.createElement('strong');
+      strong.textContent = acc.username;
+      const sub = document.createElement('span');
+      sub.textContent = isActive ? t('account_active_badge') : t('account_offline_badge');
+      meta.append(strong, sub);
+
+      item.append(av, meta);
+
+      if (isActive) {
+        const check = document.createElement('span');
+        check.className = 'account-popover-check';
+        check.textContent = '✓';
+        item.appendChild(check);
+      }
+
+      item.addEventListener('click', async () => {
+        closeAccountPopover();
+        if (isActive) return;
+        try {
+          const res = await api.selectAccount(acc.id);
+          state.appState = res.state;
+          renderAll();
+          showToast(t('toast_account_switched', { name: acc.username }), 'success');
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+
+      listEl.appendChild(item);
+    }
+  }
+
+  function setAccountModalMode(accountToEdit = null) {
+    state.editingAccountId = accountToEdit && accountToEdit.id ? accountToEdit.id : null;
+    const heading = $('account-form-heading');
+    const input = $('account-nick-input');
+    const saveBtn = $('modal-account-save');
+    const cancelBtn = $('modal-account-cancel-edit');
+    const previewAv = $('account-preview-avatar');
+
+    if (state.editingAccountId && accountToEdit) {
+      heading.textContent = t('account_form_edit', { name: accountToEdit.username });
+      input.value = accountToEdit.username;
+      saveBtn.textContent = t('btn_save_changes');
+      cancelBtn.classList.remove('hidden');
+      renderAvatarElement(previewAv, accountToEdit.username);
+    } else {
+      heading.textContent = t('account_form_add');
+      input.value = '';
+      saveBtn.textContent = t('btn_create_account');
+      cancelBtn.classList.add('hidden');
+      renderAvatarElement(previewAv, getActiveAccount()?.username || 'PeakPlayer');
+    }
+  }
+
+  function renderAccountsModalList() {
+    if (!state.appState) return;
+    const listEl = $('modal-accounts-list');
+    if (!listEl) return;
+
+    const accounts = state.appState.accounts || [];
+    const activeId = state.appState.activeAccountId;
+    listEl.innerHTML = '';
+
+    for (const acc of accounts) {
+      const isActive = acc.id === activeId;
+      const row = document.createElement('div');
+      row.className = `account-manager-row ${isActive ? 'active' : ''}`;
+
+      const left = document.createElement('div');
+      left.className = 'account-manager-left';
+
+      const av = document.createElement('span');
+      av.className = 'account-avatar-md';
+      renderAvatarElement(av, acc.username);
+
+      const meta = document.createElement('div');
+      meta.className = 'account-manager-meta';
+
+      const titleRow = document.createElement('div');
+      titleRow.className = 'account-manager-title';
+      const nickSpan = document.createElement('span');
+      nickSpan.textContent = acc.username;
+      titleRow.appendChild(nickSpan);
+      if (isActive) {
+        const badge = document.createElement('span');
+        badge.className = 'account-badge-active';
+        badge.textContent = t('account_active_badge');
+        titleRow.appendChild(badge);
+      }
+
+      const uuidSpan = document.createElement('span');
+      uuidSpan.className = 'account-manager-uuid';
+      uuidSpan.textContent = `${t('account_offline_badge')} · ${acc.uuid}`;
+
+      meta.append(titleRow, uuidSpan);
+      left.append(av, meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'account-manager-actions';
+
+      if (!isActive) {
+        const useBtn = document.createElement('button');
+        useBtn.className = 'btn-outline';
+        useBtn.type = 'button';
+        useBtn.textContent = t('btn_use_account');
+        useBtn.addEventListener('click', async () => {
+          try {
+            const res = await api.selectAccount(acc.id);
+            state.appState = res.state;
+            renderAll();
+            showToast(t('toast_account_switched', { name: acc.username }), 'success');
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+        actions.appendChild(useBtn);
+      }
+
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn-outline';
+      editBtn.type = 'button';
+      editBtn.title = t('btn_edit_account');
+      editBtn.textContent = '✎';
+      editBtn.addEventListener('click', () => {
+        setAccountModalMode(acc);
+        $('account-nick-input').focus();
+        $('account-nick-input').select();
+      });
+      actions.appendChild(editBtn);
+
+      if (accounts.length > 1) {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-danger-sm';
+        delBtn.type = 'button';
+        delBtn.textContent = t('btn_remove');
+        delBtn.addEventListener('click', async () => {
+          try {
+            state.appState = await api.deleteAccount(acc.id);
+            if (state.editingAccountId === acc.id) {
+              setAccountModalMode(null);
+            }
+            renderAll();
+            showToast(t('toast_account_deleted'), 'info');
+          } catch (err) {
+            showToast(err.message, 'error');
+          }
+        });
+        actions.appendChild(delBtn);
+      }
+
+      row.append(left, actions);
+      listEl.appendChild(row);
+    }
+  }
+
+  function openAccountsModal({ editAccount = null, focusInput = false } = {}) {
+    closeAccountPopover();
+    renderAccountsModalList();
+    setAccountModalMode(editAccount);
+    $('modal-account').classList.remove('hidden');
+    if (focusInput) {
+      $('account-nick-input').focus();
+      if (editAccount) $('account-nick-input').select();
     }
   }
 
@@ -986,9 +1233,13 @@
 
   function renderAll() {
     renderPlayView();
+    renderAccountPopover();
     renderVersionsTable();
     renderModsHeaderAndInstalled();
     renderSettingsView();
+    if (!$('modal-account').classList.contains('hidden')) {
+      renderAccountsModalList();
+    }
     if (state.activeView === 'java') {
       renderJavaAndFabricView();
     }
@@ -1009,26 +1260,73 @@
     $('setting-lang-select').addEventListener('change', (e) => changeLanguage(e.target.value));
 
     document.querySelectorAll('.top-nav-item').forEach((btn) => {
-      btn.addEventListener('click', () => switchView(btn.dataset.view));
+      btn.addEventListener('click', () => {
+        closeAccountPopover();
+        switchView(btn.dataset.view);
+      });
     });
 
-    $('topbar-account-btn').addEventListener('click', () => {
-      $('account-nick-input').value = getActiveAccount()?.username || 'PeakPlayer';
-      $('modal-account').classList.remove('hidden');
-      $('account-nick-input').focus();
+    $('topbar-account-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleAccountPopover();
     });
+    document.addEventListener('click', (e) => {
+      const wrap = $('topbar-account-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        closeAccountPopover();
+      }
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        closeAccountPopover();
+        $('modal-account').classList.add('hidden');
+        $('modal-profile').classList.add('hidden');
+        $('modal-mod-details').classList.add('hidden');
+      }
+    });
+    $('btn-popover-add-account').addEventListener('click', () =>
+      openAccountsModal({ editAccount: null, focusInput: true })
+    );
+    $('btn-popover-manage-accounts').addEventListener('click', () =>
+      openAccountsModal({ editAccount: null, focusInput: false })
+    );
     $('modal-account-close').addEventListener('click', () => $('modal-account').classList.add('hidden'));
-    $('modal-account-cancel').addEventListener('click', () => $('modal-account').classList.add('hidden'));
+    $('modal-account-done').addEventListener('click', () => $('modal-account').classList.add('hidden'));
+    $('modal-account-cancel-edit').addEventListener('click', () => setAccountModalMode(null));
+
+    let previewDebounce = null;
+    $('account-nick-input').addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      clearTimeout(previewDebounce);
+      previewDebounce = setTimeout(() => {
+        renderAvatarElement(
+          $('account-preview-avatar'),
+          val.length >= 1 ? val : getActiveAccount()?.username || 'PeakPlayer'
+        );
+      }, 150);
+    });
+    $('account-nick-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('modal-account-save').click();
+      }
+    });
+
     $('modal-account-save').addEventListener('click', async () => {
+      const wasEditing = Boolean(state.editingAccountId);
       try {
         const res = await api.saveAccount({
-          id: getActiveAccount()?.id,
+          id: state.editingAccountId || undefined,
           username: $('account-nick-input').value
         });
         state.appState = res.state;
-        $('modal-account').classList.add('hidden');
+        setAccountModalMode(null);
+        renderAccountsModalList();
         renderAll();
-        showToast(res.account.username, 'success');
+        showToast(
+          t(wasEditing ? 'toast_account_updated' : 'toast_account_added', { name: res.account.username }),
+          'success'
+        );
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -1347,9 +1645,15 @@
         state.appState = res.state;
         $('new-account-input').value = '';
         renderAll();
-        showToast(res.account.username, 'success');
+        showToast(t('toast_account_added', { name: res.account.username }), 'success');
       } catch (err) {
         showToast(err.message, 'error');
+      }
+    });
+    $('new-account-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        $('btn-add-account').click();
       }
     });
 
@@ -1482,7 +1786,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.3.0 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.3.1 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

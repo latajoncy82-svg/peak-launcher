@@ -1,8 +1,4 @@
-### Najważniejsze nowości w wersji 1.3.0 — Ikona, Baza Modów Pro & 6 Języków
-- **Naprawiona ikona aplikacji na pasku zadań Windows**: dodano wypakowywanie plików ikon (`asarUnpack`), prawidłową ścieżkę `.ico` dla `BrowserWindow` oraz natywne powiązanie `appIconIndex: 0` dla paska zadań i skrótu na pulpicie.
-- **Rozbudowana baza modów i dodatków Modrinth**:
-  - Osobne zakładki dla **Modów** (`.jar`), **Shaderów** (Iris `.zip`), **Paczek zasobów** (`.zip`) oraz widoku **Zainstalowane**, z sortowaniem (`Trafność`, `Najpopularniejsze`, `Ostatnio zaktualizowane`, `Najnowsze`), licznikiem wyników i stronicowaniem (`Załaduj więcej`).
-  - **Okno szczegółów moda** z wyborem konkretnej wersji pliku oraz **1-klik aktualizacją modów z Modrinth**.
-  - **3 gotowe pakiety 1 klikiem**: **Peak FPS Boost**, **Peak Shadery (Iris)** oraz **Peak Survival+ QoL**.
-  - **Poprawki bazy danych**: atomowy zapis metadanych (`mods.json.tmp`), rozwiązywanie zależności `version_id` oraz automatyczne usuwanie duplikatów starszych plików `.jar`.
-- **6 języków w launcherze i na stronie pobierania**: Polski (`PL`), English (`EN`), Deutsch (`DE`), Español (`ES`), Français (`FR`) i Українська (`UK`).
+### Najważniejsze nowości w wersji 1.3.1 — Obsługa wielu kont
+- **Szybki przełącznik kont na górnym pasku**: kliknięcie pigułki gracza w prawym górnym rogu otwiera przejrzyste menu z listą wszystkich kont, ich avatarami (głowa skina z Minotar), licznikiem oraz przełączaniem jednym kliknięciem.
+- **Menedżer kont graczy (`Dodaj` / `Edytuj` / `Przełącz` / `Usuń`)**: pełne okno zarządzania wieloma kontami z podglądem głowy Minecraft na żywo podczas wpisywania nicku, ochroną przed duplikatami przy edycji i zapisem czasu ostatniego użycia.
+- **Ulepszona lista kont w Ustawieniach**: spójne awatary, szybka edycja i przełączanie między dowolną liczbą profili graczy w **6 językach** (`PL`, `EN`, `DE`, `ES`, `FR`, `UK`).

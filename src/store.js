@@ -206,11 +206,19 @@ class Store {
     }
 
     const uuid = computeOfflineUuid(cleanName);
+    const now = new Date().toISOString();
     if (id) {
       const existing = this.data.accounts.find((a) => a.id === id);
       if (existing) {
+        const conflict = this.data.accounts.find(
+          (a) => a.id !== id && a.username.toLowerCase() === cleanName.toLowerCase()
+        );
+        if (conflict) {
+          throw new Error(`Konto o nicku "${cleanName}" już istnieje.`);
+        }
         existing.username = cleanName;
         existing.uuid = uuid;
+        existing.lastUsedAt = now;
         this.data.activeAccountId = existing.id;
         this.save();
         return existing;
@@ -221,6 +229,7 @@ class Store {
       (a) => a.username.toLowerCase() === cleanName.toLowerCase()
     );
     if (byName) {
+      byName.lastUsedAt = now;
       this.data.activeAccountId = byName.id;
       this.save();
       return byName;
@@ -231,7 +240,8 @@ class Store {
       username: cleanName,
       uuid,
       type: 'offline',
-      createdAt: new Date().toISOString()
+      createdAt: now,
+      lastUsedAt: now
     };
     this.data.accounts.push(account);
     this.data.activeAccountId = account.id;
@@ -240,12 +250,14 @@ class Store {
   }
 
   selectAccount(accountId) {
-    if (!this.data.accounts.some((a) => a.id === accountId)) {
+    const acc = this.data.accounts.find((a) => a.id === accountId);
+    if (!acc) {
       throw new Error('Nie znaleziono wybranego konta.');
     }
-    this.data.activeAccountId = accountId;
+    this.data.activeAccountId = acc.id;
+    acc.lastUsedAt = new Date().toISOString();
     this.save();
-    return this.getActiveAccount();
+    return acc;
   }
 
   deleteAccount(accountId) {

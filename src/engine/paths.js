@@ -9,7 +9,7 @@ try {
   electronApp = null;
 }
 
-const USER_AGENT = 'PeakLauncher/1.3.0 (Windows x64)';
+const USER_AGENT = 'PeakLauncher/1.3.1 (Windows x64)';
 
 function ensureDir(dirPath) {
   if (!dirPath) return dirPath;

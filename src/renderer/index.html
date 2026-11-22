@@ -39,10 +39,27 @@
     </nav>
 
     <div class="topbar-right">
-      <button id="topbar-account-btn" class="player-pill" type="button">
-        <span class="player-avatar-mini" id="topbar-avatar">P</span>
-        <span class="player-nick" id="topbar-username">PeakPlayer</span>
-      </button>
+      <div class="account-menu-wrap" id="topbar-account-wrap">
+        <button id="topbar-account-btn" class="player-pill" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="topbar-account-popover">
+          <span class="player-avatar-mini" id="topbar-avatar">P</span>
+          <span class="player-nick" id="topbar-username">PeakPlayer</span>
+          <svg class="player-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 4.5L6 7.5L9 4.5" />
+          </svg>
+        </button>
+
+        <div id="topbar-account-popover" class="account-popover hidden" role="menu">
+          <div class="account-popover-head">
+            <span data-i18n="accounts_title">Konta graczy</span>
+            <span id="popover-accounts-count" class="quiet-pill">1</span>
+          </div>
+          <div id="popover-accounts-list" class="account-popover-list"></div>
+          <div class="account-popover-footer">
+            <button id="btn-popover-add-account" class="popover-action-btn primary" type="button" data-i18n="btn_add_account">+ Dodaj konto</button>
+            <button id="btn-popover-manage-accounts" class="popover-action-btn" type="button" data-i18n="btn_manage_accounts">Zarządzaj kontami</button>
+          </div>
+        </div>
+      </div>
 
       <select id="topbar-lang-select" class="lang-pill" aria-label="Język / Language">
         <option value="pl">PL</option>
@@ -577,23 +594,29 @@
     </div>
   </div>
 
-  <!-- MODAL: ACCOUNT / NICK -->
+  <!-- MODAL: ACCOUNTS MANAGER (MULTI-ACCOUNT) -->
   <div id="modal-account" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-account-title">
-    <div class="modal-card modal-sm">
+    <div class="modal-card modal-md">
       <div class="modal-header">
-        <h2 id="modal-account-title" data-i18n="modal_nick_title">Nick gracza (Offline)</h2>
+        <h2 id="modal-account-title" data-i18n="accounts_title">Konta graczy</h2>
         <button id="modal-account-close" class="modal-close" type="button" aria-label="Zamknij">×</button>
       </div>
       <div class="modal-body">
-        <label class="stack-field">
-          <span data-i18n="label_nick_input">Nazwa gracza w Minecraft (3–16 znaków)</span>
-          <input id="account-nick-input" type="text" maxlength="16" placeholder="PeakPlayer" />
-        </label>
-        <p class="field-hint" data-i18n="nick_hint">Dozwolone litery, cyfry i podkreślnik (_).</p>
+        <div id="modal-accounts-list" class="accounts-manager-list"></div>
+        <div class="divider-line"></div>
+        <div class="account-form-box">
+          <span id="account-form-heading" class="group-label" data-i18n="account_form_add">Dodaj nowe konto (Offline)</span>
+          <div class="account-form-row">
+            <span id="account-preview-avatar" class="account-avatar-lg">P</span>
+            <input id="account-nick-input" type="text" maxlength="16" data-i18n-placeholder="new_nick_ph" placeholder="Nowy nick (3-16 znaków)" />
+            <button id="modal-account-save" class="btn-accent" type="button" data-i18n="btn_create_account">Dodaj konto</button>
+            <button id="modal-account-cancel-edit" class="btn-outline hidden" type="button" data-i18n="btn_cancel">Anuluj</button>
+          </div>
+          <p class="field-hint" data-i18n="nick_hint">Dozwolone litery, cyfry i podkreślnik (_).</p>
+        </div>
       </div>
       <div class="modal-footer">
-        <button id="modal-account-cancel" class="btn-outline" type="button" data-i18n="btn_cancel">Anuluj</button>
-        <button id="modal-account-save" class="btn-accent" type="button" data-i18n="btn_set_nick">Ustaw nick</button>
+        <button id="modal-account-done" class="btn-outline" type="button" data-i18n="btn_close">Zamknij</button>
       </div>
     </div>
   </div>

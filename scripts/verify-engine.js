@@ -44,7 +44,7 @@ async function runVerification() {
   fs.mkdirSync(VERIFY_DIR, { recursive: true });
 
   try {
-    console.log('1. Testowanie Store, języków i offline UUID...');
+    console.log('1. Testowanie Store, wielu kont, języków i offline UUID...');
     const store = new Store();
     const state = store.getState();
     assert(state.profiles.length >= 3, 'Brak domyślnych profili');
@@ -57,6 +57,31 @@ async function runVerification() {
     store.setLanguage('pl');
     const uuid = computeOfflineUuid('PeakPlayer');
     assert(/^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid), 'Niepoprawny UUID v3');
+
+    const accSteve = store.saveAccount({ username: 'StevePeak' });
+    const accAlex = store.saveAccount({ username: 'AlexSummit' });
+    assert.strictEqual(store.getState().accounts.length, 3, 'Powinny być 3 konta po dodaniu 2 nowych');
+    assert(accSteve.uuid !== accAlex.uuid && accSteve.uuid !== uuid, 'UUID różnych kont powinny się różnić');
+
+    const switched = store.selectAccount(accSteve.id);
+    assert.strictEqual(store.getActiveAccount().id, accSteve.id, 'Przełączenie aktywnego konta nie zadziałało');
+    assert(Boolean(switched.lastUsedAt), 'Brak znacznika lastUsedAt po wyborze konta');
+
+    const renamedAlex = store.saveAccount({ id: accAlex.id, username: 'AlexPeak' });
+    assert.strictEqual(renamedAlex.username, 'AlexPeak', 'Zmiana nicku istniejącego konta nie powiodła się');
+    assert.strictEqual(renamedAlex.uuid, computeOfflineUuid('AlexPeak'), 'UUID nie zaktualizował się po zmianie nicku');
+
+    assert.throws(
+      () => store.saveAccount({ id: accAlex.id, username: 'StevePeak' }),
+      /istnieje/i,
+      'Powinna wystąpić blokada duplikatu przy edycji nicku'
+    );
+
+    // Aktywne konto to teraz accAlex — po jego usunięciu aktywne musi bezpiecznie wrócić na inne konto
+    const afterDeleteState = store.deleteAccount(accAlex.id);
+    assert.strictEqual(afterDeleteState.accounts.length, 2, 'Usunięcie konta nie zmniejszyło listy');
+    assert(afterDeleteState.activeAccountId && afterDeleteState.activeAccountId !== accAlex.id, 'Brak fallbacku activeAccountId po usunięciu aktywnego konta');
+    store.selectAccount(accSteve.id);
     const dataDir = store.getDataDir();
 
     console.log('2. Testowanie manifestu Mojang (wszystkie wersje)...');
@@ -197,6 +222,13 @@ async function runVerification() {
       });
 
       assertNoPlaceholders(spec.args, tc.label);
+      assert(spec.args.includes(account.username), `[${tc.label}] Brak aktywnego nicku konta w argumentach uruchomienia`);
+      if (tc.id !== 'b1.7.3') {
+        assert(
+          spec.args.some((a) => a.includes(account.uuid.replace(/-/g, ''))),
+          `[${tc.label}] Brak UUID aktywnego konta w argumentach uruchomienia`
+        );
+      }
       ensureNativesTree(spec.nativesDir);
       assert(fs.existsSync(path.join(spec.nativesDir, 'lwjgl')), `[${tc.label}] Brak natives/lwjgl`);
       assert(fs.existsSync(path.join(spec.nativesDir, 'jna')), `[${tc.label}] Brak natives/jna`);

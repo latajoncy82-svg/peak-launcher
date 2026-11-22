@@ -387,7 +387,7 @@
     return text;
   }
 
-  function applyDomTranslations(root = document, vars = { ver: '1.3', tag: 'v1.3.0' }) {
+  function applyDomTranslations(root = document, vars = { ver: '1.3', tag: 'v1.3.1' }) {
     document.title = t('meta.title', vars);
     const metaDesc = root.querySelector('meta[name="description"]');
     if (metaDesc) metaDesc.setAttribute('content', t('meta.description', vars));
