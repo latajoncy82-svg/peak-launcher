@@ -3,12 +3,28 @@
   const DEFAULT_RELEASES_URL = `https://github.com/${REPO}/releases`;
   const GITHUB_API_RELEASES = `https://api.github.com/repos/${REPO}/releases?per_page=20`;
 
+  const i18n = window.PeakSiteI18n || {
+    getLanguage: () => 'pl',
+    setLanguage: () => 'pl',
+    getLocale: () => 'pl-PL',
+    t: (k) => k,
+    applyDomTranslations: () => {}
+  };
+
+  const state = {
+    releases: [],
+    source: 'fallback',
+    latestTag: 'v1.3.0'
+  };
+
   const el = {
+    langSelect: document.getElementById('site-lang-select'),
     themeToggle: document.getElementById('site-theme-toggle'),
     sunIcon: document.getElementById('theme-icon-sun'),
     moonIcon: document.getElementById('theme-icon-moon'),
 
     heroMetaKicker: document.getElementById('hero-meta-kicker'),
+    previewCaption: document.getElementById('preview-caption'),
     primaryDownloadBtn: document.getElementById('primary-download-btn'),
     primaryDownloadMeta: document.getElementById('primary-download-meta'),
     downloadMenuWrap: document.getElementById('download-menu-wrap'),
@@ -50,7 +66,7 @@
     if (!iso) return '';
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return '';
-    return date.toLocaleDateString('pl-PL', {
+    return date.toLocaleDateString(i18n.getLocale(), {
       day: 'numeric',
       month: 'long',
       year: 'numeric'
@@ -191,9 +207,14 @@
     flushList();
   }
 
+  function formatShortVer(tag) {
+    return String(tag || 'v1.3.0').replace(/^v/i, '').split('.').slice(0, 2).join('.') || '1.3';
+  }
+
   function populateHeroDownload(latest) {
     if (!latest) return;
-    const tag = latest.tag || 'v1.1.0';
+    const tag = latest.tag || 'v1.3.0';
+    state.latestTag = tag;
     const installer = latest.assets && latest.assets.installer;
     const portable = latest.assets && latest.assets.portable;
 
@@ -201,7 +222,10 @@
     const portableUrl = resolveAssetUrl(portable, latest.htmlUrl);
     const primarySize = installer && installer.size ? formatSize(installer.size) : '';
 
-    el.heroMetaKicker.textContent = `Windows 10 / 11 (64-bit) · Wersja ${tag} · Bezpłatny`;
+    el.heroMetaKicker.textContent = i18n.t('hero.kicker', { tag });
+    if (el.previewCaption) {
+      el.previewCaption.textContent = i18n.t('preview.caption', { ver: formatShortVer(tag) });
+    }
     el.primaryDownloadBtn.href = installerUrl;
     if (installer && installer.name) el.primaryDownloadBtn.setAttribute('download', installer.name);
     el.primaryDownloadMeta.textContent = primarySize ? `${tag} · ${primarySize}` : tag;
@@ -221,14 +245,14 @@
 
   function renderReleasesList(releases, source) {
     if (!Array.isArray(releases) || releases.length === 0) {
-      el.releasesList.innerHTML = '<div class="release-card"><p>Brak opublikowanych wydań.</p></div>';
+      el.releasesList.innerHTML = `<div class="release-card"><p>${i18n.t('releases.empty')}</p></div>`;
       return;
     }
 
     el.releasesSourceNote.textContent =
       source === 'github'
-        ? 'Zsynchronizowano z GitHub Releases'
-        : 'Aktualny katalog wydań Peak Launcher';
+        ? i18n.t('releases.sourceGithub')
+        : i18n.t('releases.sourceFallback');
 
     const frag = document.createDocumentFragment();
 
@@ -244,7 +268,7 @@
 
       const tagSpan = document.createElement('span');
       tagSpan.className = 'release-tag';
-      tagSpan.textContent = rel.tag || 'v1.1.0';
+      tagSpan.textContent = rel.tag || 'v1.3.0';
       titleGroup.appendChild(tagSpan);
 
       const nameSpan = document.createElement('span');
@@ -255,7 +279,7 @@
       if (index === 0) {
         const badge = document.createElement('span');
         badge.className = 'release-badge';
-        badge.textContent = 'Najnowsza';
+        badge.textContent = i18n.t('releases.latestBadge');
         titleGroup.appendChild(badge);
       }
 
@@ -283,7 +307,7 @@
         link.href = resolveAssetUrl(installer, rel.htmlUrl);
         if (installer.name) link.setAttribute('download', installer.name);
         const label = document.createElement('span');
-        label.textContent = 'Pobierz Instalator (.exe)';
+        label.textContent = i18n.t('releases.downloadInstaller');
         const size = document.createElement('span');
         size.className = 'dl-chip-size';
         size.textContent = formatSize(installer.size);
@@ -297,7 +321,7 @@
         link.href = resolveAssetUrl(portable, rel.htmlUrl);
         if (portable.name) link.setAttribute('download', portable.name);
         const label = document.createElement('span');
-        label.textContent = 'Pobierz Portable (.exe)';
+        label.textContent = i18n.t('releases.downloadPortable');
         const size = document.createElement('span');
         size.className = 'dl-chip-size';
         size.textContent = formatSize(portable.size);
@@ -310,7 +334,7 @@
       ghLink.href = rel.htmlUrl || DEFAULT_RELEASES_URL;
       ghLink.target = '_blank';
       ghLink.rel = 'noopener noreferrer';
-      ghLink.textContent = 'Zobacz na GitHubie ↗';
+      ghLink.textContent = i18n.t('releases.viewGithub');
       downloadsRow.appendChild(ghLink);
 
       card.appendChild(downloadsRow);
@@ -318,6 +342,21 @@
     });
 
     el.releasesList.replaceChildren(frag);
+  }
+
+  function applySiteLanguage(lang) {
+    const active = i18n.setLanguage(lang);
+    if (el.langSelect) el.langSelect.value = active;
+    i18n.applyDomTranslations(document, {
+      tag: state.latestTag,
+      ver: formatShortVer(state.latestTag)
+    });
+    if (state.releases.length > 0) {
+      populateHeroDownload(state.releases[0]);
+      renderReleasesList(state.releases, state.source);
+    } else if (el.heroMetaKicker) {
+      el.heroMetaKicker.textContent = i18n.t('hero.kicker', { tag: state.latestTag });
+    }
   }
 
   async function loadReleases() {
@@ -371,12 +410,19 @@
       }
     }
 
-    const releases = Array.isArray(payload?.releases) ? payload.releases : [];
-    populateHeroDownload(releases[0]);
-    renderReleasesList(releases, payload?.source || 'fallback');
+    state.releases = Array.isArray(payload?.releases) ? payload.releases : [];
+    state.source = payload?.source || 'fallback';
+    populateHeroDownload(state.releases[0]);
+    renderReleasesList(state.releases, state.source);
   }
 
   function bindEvents() {
+    if (el.langSelect) {
+      el.langSelect.addEventListener('change', (e) => {
+        applySiteLanguage(e.target.value);
+      });
+    }
+
     el.themeToggle.addEventListener('click', () => {
       const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
       setSiteTheme(next);
@@ -420,6 +466,7 @@
     if (window.PeakSiteFX) {
       window.PeakSiteFX.init('website-fx-canvas');
     }
+    applySiteLanguage(i18n.getLanguage());
     bindEvents();
     loadReleases();
   }
