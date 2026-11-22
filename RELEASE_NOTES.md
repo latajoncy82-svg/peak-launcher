@@ -1,4 +1,5 @@
-### Najważniejsze nowości w wersji 1.3.1 — Obsługa wielu kont
-- **Szybki przełącznik kont na górnym pasku**: kliknięcie pigułki gracza w prawym górnym rogu otwiera przejrzyste menu z listą wszystkich kont, ich avatarami (głowa skina z Minotar), licznikiem oraz przełączaniem jednym kliknięciem.
-- **Menedżer kont graczy (`Dodaj` / `Edytuj` / `Przełącz` / `Usuń`)**: pełne okno zarządzania wieloma kontami z podglądem głowy Minecraft na żywo podczas wpisywania nicku, ochroną przed duplikatami przy edycji i zapisem czasu ostatniego użycia.
-- **Ulepszona lista kont w Ustawieniach**: spójne awatary, szybka edycja i przełączanie między dowolną liczbą profili graczy w **6 językach** (`PL`, `EN`, `DE`, `ES`, `FR`, `UK`).
+### Najważniejsze nowości w wersji 1.3.2 — Profesjonalne Menu Opcji i Konsoli
+- **Nowy 2-kolumnowy workspace ustawień (`Wygląd i Język`, `Wydajność i Gra`, `Automatyzacja i Dane`, `Konta graczy`, `Konsola gry`)**: przejrzysty lewy panel kategorii z licznikami na żywo i dopasowanymi szklanymi kartami w obu motywach (`Nocny Szczyt` i `Lodowcowy Dzień`).
+- **Wizualne podglądy motywów i kafelki 6 języków**: miniatury panoram Peak w kartach wyboru motywu, estetyczna siatka `PL / EN / DE / ES / FR / UK` oraz animowane przełączniki toggle zamiast standardowych checkboxów.
+- **Pasek pamięci RAM z presetami + presety rozdzielczości i flag JVM**: błyskawiczne ustawianie `2–16 GB` RAM, `720p–1440p`, gotowych profili JVM (`G1GC`, `Aikar's Flags`, `ZGC`), autozapis ze wskaźnikiem `✓ Zapisano` oraz reset do ustawień domyślnych.
+- **Rozbudowana zakładka Konta i Konsola z filtrowaniem**: kopiowanie UUID i ścieżki danych 1 kliknięciem, panel diagnostyki systemu, wyszukiwanie oraz filtrowanie logów (`INFO / WARN / ERROR / SYSTEM`), a także usunięte ostre obwódki fokusa na przyciskach górnego paska.

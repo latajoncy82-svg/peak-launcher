@@ -27,6 +27,10 @@
     versionsSearch: '',
     versionsLimit: 80,
     activeView: 'play',
+    activeSettingSection: 'general',
+    consoleLevelFilter: 'all',
+    consoleSearch: '',
+    saveBadgeTimer: null,
     editingProfileId: null,
     editingAccountId: null,
     activeModDetails: null,
@@ -66,16 +70,46 @@
     setTimeout(() => div.remove(), 4200);
   }
 
+  function matchesConsoleFilters(entry) {
+    const levelOk =
+      state.consoleLevelFilter === 'all' || (entry.level || 'INFO') === state.consoleLevelFilter;
+    if (!levelOk) return false;
+    const q = state.consoleSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (
+      String(entry.text || '').toLowerCase().includes(q) ||
+      String(entry.level || '').toLowerCase().includes(q)
+    );
+  }
+
+  function createLogRow(entry) {
+    const row = document.createElement('div');
+    row.className = `log-line log-${entry.level || 'INFO'}`;
+    const time = entry.ts ? entry.ts.slice(11, 19) : '';
+    row.textContent = `[${time}] [${entry.level || 'INFO'}] ${entry.text}`;
+    return row;
+  }
+
+  function renderConsoleOutput() {
+    const out = $('console-output');
+    if (!out) return;
+    const frag = document.createDocumentFragment();
+    for (const entry of state.logs) {
+      if (matchesConsoleFilters(entry)) {
+        frag.appendChild(createLogRow(entry));
+      }
+    }
+    out.replaceChildren(frag);
+    out.scrollTop = out.scrollHeight;
+  }
+
   function appendLog(entry) {
     state.logs.push(entry);
     if (state.logs.length > 500) state.logs.shift();
     const out = $('console-output');
     if (!out) return;
-    const row = document.createElement('div');
-    row.className = `log-line log-${entry.level || 'INFO'}`;
-    const time = entry.ts ? entry.ts.slice(11, 19) : '';
-    row.textContent = `[${time}] [${entry.level || 'INFO'}] ${entry.text}`;
-    out.appendChild(row);
+    if (!matchesConsoleFilters(entry)) return;
+    out.appendChild(createLogRow(entry));
     out.scrollTop = out.scrollHeight;
   }
 
@@ -106,9 +140,10 @@
     if (!i18n) return;
     const clean = i18n.setLanguage(lang);
     const topSel = $('topbar-lang-select');
-    const setSel = $('setting-lang-select');
     if (topSel) topSel.value = clean;
-    if (setSel) setSel.value = clean;
+    document.querySelectorAll('.lang-tile').forEach((tile) => {
+      tile.classList.toggle('active', tile.dataset.langChoice === clean);
+    });
   }
 
   function applyTheme(theme) {
@@ -827,6 +862,92 @@
     }
   }
 
+  function switchSettingSection(sectionName) {
+    const name = sectionName || 'general';
+    state.activeSettingSection = name;
+    document.querySelectorAll('.settings-nav-item').forEach((btn) => {
+      const isMatch = btn.dataset.settingSection === name;
+      btn.classList.toggle('active', isMatch);
+      btn.setAttribute('aria-selected', String(isMatch));
+    });
+    document.querySelectorAll('.settings-pane').forEach((pane) => {
+      pane.classList.toggle('active', pane.id === `setting-pane-${name}`);
+    });
+    if (name === 'console') {
+      const out = $('console-output');
+      if (out) out.scrollTop = out.scrollHeight;
+    }
+  }
+
+  function updateRamVisuals(ramMb) {
+    const mem = state.appState?.systemMemory || { totalMb: 8192, maxSafeMb: 6144 };
+    const slider = $('setting-ram-slider');
+    const minVal = Number(slider?.min || 1024);
+    const maxVal = Number(slider?.max || 16384);
+    const clamped = Math.max(minVal, Math.min(maxVal, Number(ramMb) || 4096));
+    const gbStr = `${(clamped / 1024).toFixed(1)} GB`;
+
+    $('setting-ram-value').textContent = `${clamped} MB · ${gbStr}`;
+    const navPill = $('nav-ram-pill');
+    if (navPill) navPill.textContent = gbStr;
+
+    const rangePct = maxVal > minVal ? ((clamped - minVal) / (maxVal - minVal)) * 100 : 0;
+    if (slider) slider.style.setProperty('--range-pct', `${rangePct.toFixed(1)}%`);
+
+    const sysRatio = mem.totalMb > 0 ? Math.min(100, (clamped / mem.totalMb) * 100) : 40;
+    const fill = $('ram-meter-fill');
+    if (fill) {
+      fill.style.width = `${sysRatio.toFixed(1)}%`;
+      fill.classList.toggle('warn', sysRatio > 75);
+    }
+
+    document.querySelectorAll('#ram-preset-chips .preset-chip').forEach((chip) => {
+      const val = Number(chip.dataset.ram);
+      chip.disabled = val > mem.maxSafeMb;
+      chip.classList.toggle('active', val === clamped);
+    });
+  }
+
+  function updateResolutionVisuals() {
+    const enabled = Boolean($('setting-custom-res')?.checked);
+    const wrap = $('resolution-fields-wrap');
+    if (wrap) wrap.classList.toggle('is-disabled', !enabled);
+    const curKey = `${$('setting-width')?.value || ''}x${$('setting-height')?.value || ''}`;
+    document.querySelectorAll('#res-preset-chips .preset-chip').forEach((chip) => {
+      chip.classList.toggle('active', enabled && chip.dataset.res === curKey);
+    });
+  }
+
+  function flashSavedBadge() {
+    const badge = $('settings-save-badge');
+    if (!badge) return;
+    badge.classList.remove('hidden');
+    clearTimeout(state.saveBadgeTimer);
+    state.saveBadgeTimer = setTimeout(() => badge.classList.add('hidden'), 2200);
+  }
+
+  async function saveSettingsNow({ showNotification = false } = {}) {
+    try {
+      state.appState = await api.updateSettings({
+        ramMb: Number($('setting-ram-slider').value),
+        customResolution: $('setting-custom-res').checked,
+        width: Number($('setting-width').value),
+        height: Number($('setting-height').value),
+        autoInstallJava: $('setting-auto-java').checked,
+        autoInstallFabric: $('setting-auto-fabric').checked,
+        closeOnLaunch: $('setting-close-launch').checked,
+        jvmArgs: $('setting-jvm-args').value
+      });
+      renderSettingsView();
+      flashSavedBadge();
+      if (showNotification) {
+        showToast(t('toast_saved_settings'), 'success');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
   function renderSettingsView() {
     if (!state.appState) return;
     const s = state.appState.settings;
@@ -834,52 +955,82 @@
 
     applyTheme(state.appState.theme);
     applyLanguageUI(state.appState.language || 'pl');
+    switchSettingSection(state.activeSettingSection);
 
     const slider = $('setting-ram-slider');
     slider.max = String(Math.max(2048, mem.maxSafeMb));
     slider.value = String(s.ramMb);
-    $('setting-ram-value').textContent = `${s.ramMb} MB`;
     $('setting-ram-hint').textContent = t('ram_hint', {
       gb: (mem.totalMb / 1024).toFixed(1),
       max: mem.maxSafeMb
     });
+    updateRamVisuals(s.ramMb);
 
     $('setting-custom-res').checked = Boolean(s.customResolution);
     $('setting-width').value = String(s.width || 1280);
     $('setting-height').value = String(s.height || 720);
+    updateResolutionVisuals();
+
     $('setting-auto-java').checked = Boolean(s.autoInstallJava);
     $('setting-auto-fabric').checked = Boolean(s.autoInstallFabric);
     $('setting-close-launch').checked = Boolean(s.closeOnLaunch);
     $('setting-jvm-args').value = s.jvmArgs || '';
+    document.querySelectorAll('#jvm-preset-chips .preset-chip').forEach((chip) => {
+      chip.classList.toggle('active', Boolean(chip.dataset.jvm) && chip.dataset.jvm === (s.jvmArgs || '').trim());
+    });
     $('setting-datadir-path').textContent = state.appState.dataDir || '';
+
+    const navAccCount = $('nav-accounts-count');
+    if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
+
+    if ($('diag-version')) $('diag-version').textContent = 'v1.3.2';
+    if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
+    if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
+    if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
+
+    const newAccInput = $('new-account-input');
+    if ($('settings-new-acc-avatar') && (!newAccInput || !newAccInput.value.trim())) {
+      renderAvatarElement($('settings-new-acc-avatar'), getActiveAccount()?.username || 'PeakPlayer');
+    }
 
     const accList = $('settings-accounts-list');
     accList.innerHTML = '';
     for (const acc of state.appState.accounts) {
       const isActive = acc.id === state.appState.activeAccountId;
       const row = document.createElement('div');
-      row.className = 'compact-row';
+      row.className = `account-manager-row ${isActive ? 'active' : ''}`;
 
       const left = document.createElement('div');
-      left.className = 'settings-account-left';
+      left.className = 'account-manager-left';
 
       const av = document.createElement('span');
-      av.className = 'settings-account-avatar';
+      av.className = 'account-avatar-md';
       renderAvatarElement(av, acc.username);
 
       const meta = document.createElement('div');
-      meta.className = 'compact-row-meta';
-      const title = document.createElement('strong');
-      title.textContent = isActive ? `${acc.username} · ${t('account_active_badge')}` : acc.username;
+      meta.className = 'account-manager-meta';
+
+      const titleRow = document.createElement('div');
+      titleRow.className = 'account-manager-title';
+      const title = document.createElement('span');
+      title.textContent = acc.username;
+      titleRow.appendChild(title);
+      if (isActive) {
+        const badge = document.createElement('span');
+        badge.className = 'account-badge-active';
+        badge.textContent = t('account_active_badge');
+        titleRow.appendChild(badge);
+      }
+
       const sub = document.createElement('span');
-      sub.textContent = `UUID: ${acc.uuid}`;
-      meta.append(title, sub);
+      sub.className = 'account-manager-uuid';
+      sub.textContent = `${t('account_offline_badge')} · ${acc.uuid}`;
+      meta.append(titleRow, sub);
 
       left.append(av, meta);
 
       const actions = document.createElement('div');
-      actions.style.display = 'flex';
-      actions.style.gap = '6px';
+      actions.className = 'account-manager-actions';
 
       if (!isActive) {
         const useBtn = document.createElement('button');
@@ -894,6 +1045,16 @@
         });
         actions.appendChild(useBtn);
       }
+
+      const copyUuidBtn = document.createElement('button');
+      copyUuidBtn.className = 'btn-outline';
+      copyUuidBtn.type = 'button';
+      copyUuidBtn.textContent = t('btn_copy_uuid');
+      copyUuidBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(acc.uuid);
+        showToast(t('toast_copied'), 'info');
+      });
+      actions.appendChild(copyUuidBtn);
 
       const editBtn = document.createElement('button');
       editBtn.className = 'btn-outline';
@@ -1257,7 +1418,9 @@
     });
 
     $('topbar-lang-select').addEventListener('change', (e) => changeLanguage(e.target.value));
-    $('setting-lang-select').addEventListener('change', (e) => changeLanguage(e.target.value));
+    document.querySelectorAll('.lang-tile').forEach((tile) => {
+      tile.addEventListener('click', () => changeLanguage(tile.dataset.langChoice));
+    });
 
     document.querySelectorAll('.top-nav-item').forEach((btn) => {
       btn.addEventListener('click', () => {
@@ -1596,15 +1759,8 @@
       }
     });
 
-    document.querySelectorAll('[data-consoletab]').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const name = tab.dataset.consoletab;
-        document.querySelectorAll('[data-consoletab]').forEach((t) =>
-          t.classList.toggle('active', t === tab)
-        );
-        $('consoletab-settings').classList.toggle('active', name === 'settings');
-        $('consoletab-logs').classList.toggle('active', name === 'logs');
-      });
+    document.querySelectorAll('.settings-nav-item').forEach((btn) => {
+      btn.addEventListener('click', () => switchSettingSection(btn.dataset.settingSection));
     });
 
     document.querySelectorAll('.theme-option').forEach((btn) => {
@@ -1613,31 +1769,98 @@
         await api.setTheme(theme);
         state.appState.theme = theme;
         applyTheme(theme);
+        flashSavedBadge();
       });
     });
 
     $('setting-ram-slider').addEventListener('input', (e) => {
-      $('setting-ram-value').textContent = `${e.target.value} MB`;
+      updateRamVisuals(Number(e.target.value));
+    });
+    $('setting-ram-slider').addEventListener('change', () => saveSettingsNow({ showNotification: false }));
+
+    $('ram-preset-chips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.preset-chip');
+      if (!chip || chip.disabled) return;
+      $('setting-ram-slider').value = chip.dataset.ram;
+      updateRamVisuals(Number(chip.dataset.ram));
+      saveSettingsNow({ showNotification: false });
     });
 
-    $('btn-save-settings').addEventListener('click', async () => {
+    $('setting-custom-res').addEventListener('change', () => {
+      updateResolutionVisuals();
+      saveSettingsNow({ showNotification: false });
+    });
+
+    $('res-preset-chips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.preset-chip');
+      if (!chip || !chip.dataset.res) return;
+      const [w, h] = chip.dataset.res.split('x');
+      $('setting-custom-res').checked = true;
+      $('setting-width').value = w;
+      $('setting-height').value = h;
+      updateResolutionVisuals();
+      saveSettingsNow({ showNotification: false });
+    });
+
+    $('setting-width').addEventListener('change', () => {
+      updateResolutionVisuals();
+      saveSettingsNow({ showNotification: false });
+    });
+    $('setting-height').addEventListener('change', () => {
+      updateResolutionVisuals();
+      saveSettingsNow({ showNotification: false });
+    });
+
+    $('jvm-preset-chips').addEventListener('click', (e) => {
+      const chip = e.target.closest('.preset-chip');
+      if (!chip) return;
+      $('setting-jvm-args').value = chip.dataset.jvm || '';
+      saveSettingsNow({ showNotification: false });
+    });
+    $('setting-jvm-args').addEventListener('change', () => saveSettingsNow({ showNotification: false }));
+
+    $('setting-close-launch').addEventListener('change', () => saveSettingsNow({ showNotification: false }));
+    $('setting-auto-java').addEventListener('change', () => saveSettingsNow({ showNotification: false }));
+    $('setting-auto-fabric').addEventListener('change', () => saveSettingsNow({ showNotification: false }));
+
+    $('btn-save-settings').addEventListener('click', () => saveSettingsNow({ showNotification: true }));
+
+    $('btn-reset-settings').addEventListener('click', async () => {
+      const mem = state.appState?.systemMemory || { maxSafeMb: 6144 };
+      const defRam = Math.min(4096, Math.max(2048, mem.maxSafeMb));
       try {
         state.appState = await api.updateSettings({
-          ramMb: Number($('setting-ram-slider').value),
-          customResolution: $('setting-custom-res').checked,
-          width: Number($('setting-width').value),
-          height: Number($('setting-height').value),
-          autoInstallJava: $('setting-auto-java').checked,
-          autoInstallFabric: $('setting-auto-fabric').checked,
-          closeOnLaunch: $('setting-close-launch').checked,
-          jvmArgs: $('setting-jvm-args').value
+          ramMb: defRam,
+          customResolution: false,
+          width: 1280,
+          height: 720,
+          autoInstallJava: true,
+          autoInstallFabric: true,
+          closeOnLaunch: false,
+          jvmArgs: ''
         });
-        renderAll();
-        showToast(t('toast_saved_settings'), 'success');
+        renderSettingsView();
+        flashSavedBadge();
+        showToast(t('toast_settings_reset'), 'info');
       } catch (err) {
         showToast(err.message, 'error');
       }
     });
+
+    let settingsAccDebounce = null;
+    $('new-account-input').addEventListener('input', (e) => {
+      const val = e.target.value.trim();
+      clearTimeout(settingsAccDebounce);
+      settingsAccDebounce = setTimeout(() => {
+        renderAvatarElement(
+          $('settings-new-acc-avatar'),
+          val.length >= 1 ? val : getActiveAccount()?.username || 'PeakPlayer'
+        );
+      }, 150);
+    });
+    $('btn-open-accounts-modal').addEventListener('click', () =>
+      openAccountsModal({ editAccount: null, focusInput: false })
+    );
 
     $('btn-add-account').addEventListener('click', async () => {
       try {
@@ -1657,6 +1880,12 @@
       }
     });
 
+    $('btn-copy-datadir').addEventListener('click', () => {
+      if (state.appState?.dataDir) {
+        navigator.clipboard.writeText(state.appState.dataDir);
+        showToast(t('toast_copied'), 'info');
+      }
+    });
     $('btn-open-datadir').addEventListener('click', () => api.openPath(state.appState?.dataDir));
     $('btn-change-datadir').addEventListener('click', async () => {
       const picked = await api.pickDirectory();
@@ -1665,9 +1894,23 @@
       renderAll();
     });
 
+    $('console-level-filters').addEventListener('click', (e) => {
+      const pill = e.target.closest('.filter-pill');
+      if (!pill) return;
+      document.querySelectorAll('#console-level-filters .filter-pill').forEach((p) =>
+        p.classList.toggle('active', p === pill)
+      );
+      state.consoleLevelFilter = pill.dataset.level || 'all';
+      renderConsoleOutput();
+    });
+    $('console-search-input').addEventListener('input', (e) => {
+      state.consoleSearch = e.target.value;
+      renderConsoleOutput();
+    });
     $('btn-copy-logs').addEventListener('click', () => {
       const text = state.logs.map((l) => `[${l.level}] ${l.text}`).join('\n');
       navigator.clipboard.writeText(text);
+      showToast(t('toast_copied'), 'info');
     });
     $('btn-clear-logs').addEventListener('click', () => {
       state.logs = [];
@@ -1743,6 +1986,11 @@
           : st.state === 'preparing'
             ? t('console_preparing')
             : t('console_ready');
+      for (const dot of [$('nav-console-dot'), $('console-live-dot')]) {
+        if (!dot) continue;
+        dot.classList.toggle('running', st.state === 'running');
+        dot.classList.toggle('preparing', st.state === 'preparing');
+      }
       if (st.state === 'idle') {
         updateLaunchButtonUI({ running: false });
         if (st.error) {
@@ -1786,7 +2034,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.3.1 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.3.2 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);
@@ -1817,7 +2065,7 @@
     window.__peakReady = true;
   }
 
-  window.__peakTestNavigate = async (view, theme, lang) => {
+  window.__peakTestNavigate = async (view, theme, lang, settingSection) => {
     if (lang) {
       await changeLanguage(lang);
     }
@@ -1827,6 +2075,9 @@
       applyTheme(theme);
     }
     switchView(view || 'play');
+    if (settingSection) {
+      switchSettingSection(settingSection);
+    }
   };
 
   init().catch((err) => {

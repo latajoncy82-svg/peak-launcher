@@ -377,120 +377,357 @@
             <h1 data-i18n="options_title">Opcje i Konsola</h1>
             <p data-i18n="options_sub">Język, motyw, pamięć RAM, konta graczy oraz podgląd logów Minecrafta.</p>
           </div>
-          <div class="subtabs">
-            <button class="subtab active" type="button" data-consoletab="settings" data-i18n="tab_settings">Ustawienia</button>
-            <button class="subtab" type="button" data-consoletab="logs" data-i18n="tab_console">Konsola gry</button>
+          <div class="settings-header-actions">
+            <span id="settings-save-badge" class="save-status-pill hidden" data-i18n="saved_badge">✓ Zapisano</span>
+            <button id="btn-reset-settings" class="btn-outline" type="button" data-i18n="btn_reset_settings">Domyślne</button>
+            <button id="btn-save-settings" class="btn-accent" type="button" data-i18n="btn_save_settings">Zapisz ustawienia</button>
           </div>
         </div>
 
-        <div id="consoletab-settings" class="modtab-panel active">
-          <div class="settings-grid">
-            <div class="sheet-card">
-              <h3 data-i18n="card_appearance">Wygląd i Język</h3>
-              <label class="stack-field">
-                <span data-i18n="label_language">Język launchera</span>
-                <select id="setting-lang-select">
-                  <option value="pl">Polski (PL)</option>
-                  <option value="en">English (EN)</option>
-                  <option value="de">Deutsch (DE)</option>
-                  <option value="es">Español (ES)</option>
-                  <option value="fr">Français (FR)</option>
-                  <option value="uk">Українська (UK)</option>
-                </select>
-              </label>
+        <div class="settings-workspace">
+          <aside class="settings-sidebar" role="tablist" aria-label="Kategorie ustawień">
+            <button class="settings-nav-item active" type="button" role="tab" aria-selected="true" data-setting-section="general">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="8" cy="8" r="5.8" />
+                  <path d="M5.5 7.2h.01M10.5 7.2h.01M8 5.2h.01M6.2 10.6h3.6" />
+                </svg>
+                <span data-i18n="set_nav_general">Wygląd i Język</span>
+              </span>
+            </button>
 
-              <div class="theme-cards">
-                <button id="card-theme-dark" class="theme-option active" type="button" data-theme-choice="alpine-dark">
-                  <span class="theme-swatch swatch-dark"></span>
-                  <div>
-                    <strong data-i18n="theme_dark_name">Nocny Szczyt</strong>
-                    <span data-i18n="theme_dark_sub">Ciemny kinowy</span>
-                  </div>
-                </button>
-                <button id="card-theme-light" class="theme-option" type="button" data-theme-choice="alpine-light">
-                  <span class="theme-swatch swatch-light"></span>
-                  <div>
-                    <strong data-i18n="theme_light_name">Lodowcowy Dzień</strong>
-                    <span data-i18n="theme_light_sub">Jasny alpejski</span>
-                  </div>
-                </button>
-              </div>
+            <button class="settings-nav-item" type="button" role="tab" aria-selected="false" data-setting-section="performance">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M3 12a6.2 6.2 0 1 1 10 0" />
+                  <path d="M8 8.2L10.8 5.4" />
+                  <circle cx="8" cy="8.5" r="1" />
+                </svg>
+                <span data-i18n="set_nav_performance">Wydajność i Gra</span>
+              </span>
+              <span id="nav-ram-pill" class="quiet-pill">4.0 GB</span>
+            </button>
 
-              <div class="ram-control">
-                <div class="ram-head">
-                  <span data-i18n="label_ram">Przydzielony RAM</span>
-                  <strong id="setting-ram-value">4096 MB</strong>
+            <button class="settings-nav-item" type="button" role="tab" aria-selected="false" data-setting-section="system">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2.2 4.2a1.2 1.2 0 0 1 1.2-1.2h3l1.2 1.5h5a1.2 1.2 0 0 1 1.2 1.2v6.1a1.2 1.2 0 0 1-1.2 1.2H3.4a1.2 1.2 0 0 1-1.2-1.2z" />
+                </svg>
+                <span data-i18n="set_nav_system">Automatyzacja i Dane</span>
+              </span>
+            </button>
+
+            <button class="settings-nav-item" type="button" role="tab" aria-selected="false" data-setting-section="accounts">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <circle cx="6.2" cy="5.2" r="2.3" />
+                  <path d="M2 13a4.2 4.2 0 0 1 8.4 0" />
+                  <circle cx="11.8" cy="5.8" r="1.7" />
+                  <path d="M11.6 9.8A3.2 3.2 0 0 1 14.5 13" />
+                </svg>
+                <span data-i18n="set_nav_accounts">Konta graczy</span>
+              </span>
+              <span id="nav-accounts-count" class="quiet-pill">1</span>
+            </button>
+
+            <div class="settings-nav-sep"></div>
+
+            <button class="settings-nav-item" type="button" role="tab" aria-selected="false" data-setting-section="console">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="2" y="2.8" width="12" height="10.4" rx="2" />
+                  <path d="M4.8 6.4L7 8.4 4.8 10.4M8.4 10.4h2.8" />
+                </svg>
+                <span data-i18n="set_nav_console">Konsola gry</span>
+              </span>
+              <span id="nav-console-dot" class="console-dot"></span>
+            </button>
+
+            <div class="settings-sidebar-meta">
+              <span>Peak Launcher v1.3.2</span>
+              <span>Windows x64 · MIT</span>
+            </div>
+          </aside>
+
+          <div class="settings-content">
+            <!-- PANE 1: GENERAL (THEME, LANGUAGE, BEHAVIOR) -->
+            <div id="setting-pane-general" class="settings-pane active" role="tabpanel">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_theme_title">Motyw wizualny</h3>
+                  <p data-i18n="card_theme_sub">Wybierz kinową atmosferę launchera.</p>
                 </div>
-                <input id="setting-ram-slider" type="range" min="1024" max="16384" step="512" value="4096" />
-                <span class="field-hint" id="setting-ram-hint">Wykryto w komputerze: ...</span>
-              </div>
+                <div class="theme-cards">
+                  <button id="card-theme-dark" class="theme-option active" type="button" data-theme-choice="alpine-dark">
+                    <div class="theme-preview-banner preview-dark">
+                      <span class="theme-check-badge">✓</span>
+                    </div>
+                    <div class="theme-option-body">
+                      <strong data-i18n="theme_dark_name">Nocny Szczyt</strong>
+                      <span data-i18n="theme_dark_sub">Ciemny kinowy</span>
+                    </div>
+                  </button>
+                  <button id="card-theme-light" class="theme-option" type="button" data-theme-choice="alpine-light">
+                    <div class="theme-preview-banner preview-light">
+                      <span class="theme-check-badge">✓</span>
+                    </div>
+                    <div class="theme-option-body">
+                      <strong data-i18n="theme_light_name">Lodowcowy Dzień</strong>
+                      <span data-i18n="theme_light_sub">Jasny alpejski</span>
+                    </div>
+                  </button>
+                </div>
+              </section>
 
-              <label class="checkbox-row">
-                <input id="setting-custom-res" type="checkbox" />
-                <span data-i18n="custom_res">Własna rozdzielczość okna gry</span>
-              </label>
-              <div class="form-grid two">
-                <label>
-                  <span data-i18n="label_width">Szerokość (px)</span>
-                  <input id="setting-width" type="number" min="640" max="3840" value="1280" />
-                </label>
-                <label>
-                  <span data-i18n="label_height">Wysokość (px)</span>
-                  <input id="setting-height" type="number" min="480" max="2160" value="720" />
-                </label>
-              </div>
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_lang_title">Język interfejsu</h3>
+                </div>
+                <div class="lang-grid" id="setting-lang-grid">
+                  <button class="lang-tile active" type="button" data-lang-choice="pl">
+                    <span class="lang-code">PL</span>
+                    <span class="lang-native">Polski</span>
+                  </button>
+                  <button class="lang-tile" type="button" data-lang-choice="en">
+                    <span class="lang-code">EN</span>
+                    <span class="lang-native">English</span>
+                  </button>
+                  <button class="lang-tile" type="button" data-lang-choice="de">
+                    <span class="lang-code">DE</span>
+                    <span class="lang-native">Deutsch</span>
+                  </button>
+                  <button class="lang-tile" type="button" data-lang-choice="es">
+                    <span class="lang-code">ES</span>
+                    <span class="lang-native">Español</span>
+                  </button>
+                  <button class="lang-tile" type="button" data-lang-choice="fr">
+                    <span class="lang-code">FR</span>
+                    <span class="lang-native">Français</span>
+                  </button>
+                  <button class="lang-tile" type="button" data-lang-choice="uk">
+                    <span class="lang-code">UK</span>
+                    <span class="lang-native">Українська</span>
+                  </button>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_behavior_title">Zachowanie okna</h3>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="close_on_launch">Zminimalizuj launcher po uruchomieniu gry</strong>
+                    <span data-i18n="close_on_launch_sub">Ukrywa okno launchera na pasku zadań podczas gry i przywraca je po wyjściu.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-close-launch" type="checkbox" />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+              </section>
             </div>
 
-            <div class="sheet-card">
-              <h3 data-i18n="card_automation">Automatyzacja, Konta i Dane</h3>
-              <label class="checkbox-row">
-                <input id="setting-auto-java" type="checkbox" checked />
-                <span data-i18n="auto_java">Automatycznie pobieraj brakującą Javę (8 / 17 / 21 / 25)</span>
-              </label>
-              <label class="checkbox-row">
-                <input id="setting-auto-fabric" type="checkbox" checked />
-                <span data-i18n="auto_fabric">Automatycznie instaluj Fabric Loadera dla profili z modami</span>
-              </label>
-              <label class="checkbox-row">
-                <input id="setting-close-launch" type="checkbox" />
-                <span data-i18n="close_on_launch">Zminimalizuj launcher po uruchomieniu gry</span>
-              </label>
-              <label class="stack-field">
-                <span data-i18n="label_jvm">Dodatkowe argumenty JVM (opcjonalnie)</span>
-                <input id="setting-jvm-args" type="text" placeholder="np. -XX:+UseG1GC" />
-              </label>
-              <div>
-                <button id="btn-save-settings" class="btn-accent" type="button" data-i18n="btn_save_settings">Zapisz ustawienia</button>
-              </div>
+            <!-- PANE 2: PERFORMANCE (RAM, RESOLUTION, JVM) -->
+            <div id="setting-pane-performance" class="settings-pane" role="tabpanel">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <div>
+                    <h3 data-i18n="card_ram_title">Pamięć RAM (Java Heap)</h3>
+                    <p data-i18n="card_ram_sub">Przydziel pamięć dla instancji Minecrafta. Zalecane 4–8 GB dla paczek modów.</p>
+                  </div>
+                  <strong id="setting-ram-value" class="ram-readout">4096 MB · 4.0 GB</strong>
+                </div>
 
-              <div class="divider-line"></div>
+                <div class="ram-meter-track">
+                  <div id="ram-meter-fill" class="ram-meter-fill" style="width: 35%"></div>
+                </div>
 
-              <div class="account-add-row">
-                <input id="new-account-input" type="text" maxlength="16" data-i18n-placeholder="new_nick_ph" placeholder="Nowy nick (3-16 znaków)" />
-                <button id="btn-add-account" class="btn-outline" type="button" data-i18n="btn_add_nick">Dodaj nick</button>
-              </div>
-              <div id="settings-accounts-list" class="compact-list"></div>
+                <input id="setting-ram-slider" class="peak-slider" type="range" min="1024" max="16384" step="512" value="4096" />
 
-              <div class="datadir-box">
-                <code id="setting-datadir-path">...</code>
+                <div class="ram-sub-row">
+                  <span class="field-hint" id="setting-ram-hint">Wykryto w komputerze: ...</span>
+                  <div id="ram-preset-chips" class="preset-chips">
+                    <button class="preset-chip" type="button" data-ram="2048">2 GB</button>
+                    <button class="preset-chip" type="button" data-ram="4096">4 GB</button>
+                    <button class="preset-chip" type="button" data-ram="6144">6 GB</button>
+                    <button class="preset-chip" type="button" data-ram="8192">8 GB</button>
+                    <button class="preset-chip" type="button" data-ram="12288">12 GB</button>
+                    <button class="preset-chip" type="button" data-ram="16384">16 GB</button>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="card_res_title">Rozdzielczość okna gry</strong>
+                    <span data-i18n="custom_res_sub">Wymuś własne wymiary okna zamiast domyślnego rozmiaru Minecrafta.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-custom-res" type="checkbox" />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div id="resolution-fields-wrap" class="resolution-fields-wrap is-disabled">
+                  <div id="res-preset-chips" class="preset-chips">
+                    <button class="preset-chip" type="button" data-res="1280x720">720p (1280×720)</button>
+                    <button class="preset-chip" type="button" data-res="1600x900">900p (1600×900)</button>
+                    <button class="preset-chip" type="button" data-res="1920x1080">1080p (1920×1080)</button>
+                    <button class="preset-chip" type="button" data-res="2560x1440">1440p (2560×1440)</button>
+                  </div>
+                  <div class="res-inputs-pair">
+                    <label class="stack-field">
+                      <span data-i18n="label_width">Szerokość (px)</span>
+                      <input id="setting-width" type="number" min="640" max="3840" value="1280" />
+                    </label>
+                    <span class="res-pair-sep">×</span>
+                    <label class="stack-field">
+                      <span data-i18n="label_height">Wysokość (px)</span>
+                      <input id="setting-height" type="number" min="480" max="2160" value="720" />
+                    </label>
+                  </div>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_jvm_title">Zaawansowane argumenty JVM</h3>
+                  <p data-i18n="jvm_sub">Dodatkowe flagi przekazywane maszynie wirtualnej Java przy uruchamianiu gry.</p>
+                </div>
+                <input id="setting-jvm-args" class="mono-input" type="text" placeholder="np. -XX:+UseG1GC -XX:+UnlockExperimentalVMOptions" />
+                <div id="jvm-preset-chips" class="preset-chips">
+                  <button class="preset-chip" type="button" data-jvm="-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions">G1GC</button>
+                  <button class="preset-chip" type="button" data-jvm="-XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC">Aikar's Flags</button>
+                  <button class="preset-chip" type="button" data-jvm="-XX:+UseZGC -XX:+ZGenerational">ZGC (Java 21+)</button>
+                  <button class="preset-chip" type="button" data-jvm="" data-i18n="jvm_clear">Wyczyść</button>
+                </div>
+              </section>
+            </div>
+
+            <!-- PANE 3: SYSTEM (AUTOMATION, DATA DIR, DIAGNOSTICS) -->
+            <div id="setting-pane-system" class="settings-pane" role="tabpanel">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_auto_title">Automatyczne środowisko</h3>
+                </div>
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="auto_java">Automatycznie pobieraj brakującą Javę (8 / 17 / 21 / 25)</strong>
+                    <span data-i18n="auto_java_sub">Wykrywa lokalne JDK i pobiera brakującą wersję Eclipse Temurin przed startem.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-auto-java" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="divider-line"></div>
+
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="auto_fabric">Automatycznie instaluj Fabric Loadera dla profili z modami</strong>
+                    <span data-i18n="auto_fabric_sub">Automatycznie instaluje kompatybilny Fabric Loader dla profili z modami.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-auto-fabric" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_datadir_title">Folder danych i instancji</h3>
+                  <p data-i18n="datadir_sub">Przechowuje wersje gry, biblioteki, zapisy światów oraz mody.</p>
+                </div>
+                <div class="datadir-path-bar">
+                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M2 4.2a1.2 1.2 0 0 1 1.2-1.2h3l1.2 1.5h5.4a1.2 1.2 0 0 1 1.2 1.2v6.1a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 11.8z" />
+                  </svg>
+                  <code id="setting-datadir-path">...</code>
+                  <button id="btn-copy-datadir" class="btn-outline" type="button" data-i18n="btn_copy_path">Kopiuj ścieżkę</button>
+                </div>
                 <div class="datadir-actions">
                   <button id="btn-change-datadir" class="btn-outline" type="button" data-i18n="btn_change_dir">Zmień folder</button>
                   <button id="btn-open-datadir" class="btn-outline" type="button" data-i18n="btn_open_dir">Otwórz</button>
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
+              </section>
 
-        <div id="consoletab-logs" class="modtab-panel">
-          <div class="console-toolbar">
-            <span id="console-status-text" data-i18n="console_ready">Status: gotowy</span>
-            <div class="console-actions">
-              <button id="btn-copy-logs" class="btn-outline" type="button" data-i18n="btn_copy_logs">Kopiuj logi</button>
-              <button id="btn-clear-logs" class="btn-outline" type="button" data-i18n="btn_clear_logs">Wyczyść</button>
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_diag_title">Informacje o środowisku</h3>
+                </div>
+                <div class="diag-grid">
+                  <div class="diag-card">
+                    <span data-i18n="diag_version">Wersja launchera</span>
+                    <strong id="diag-version">v1.3.2</strong>
+                  </div>
+                  <div class="diag-card">
+                    <span data-i18n="diag_ram">Pamięć systemu</span>
+                    <strong id="diag-ram">...</strong>
+                  </div>
+                  <div class="diag-card">
+                    <span data-i18n="diag_profiles">Profile gry</span>
+                    <strong id="diag-profiles">...</strong>
+                  </div>
+                  <div class="diag-card">
+                    <span data-i18n="diag_javas">Wykryte Javy</span>
+                    <strong id="diag-javas">...</strong>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            <!-- PANE 4: ACCOUNTS -->
+            <div id="setting-pane-accounts" class="settings-pane" role="tabpanel">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_add_account_title">Dodaj nowe konto</h3>
+                </div>
+                <div class="account-form-row">
+                  <span id="settings-new-acc-avatar" class="account-avatar-md">P</span>
+                  <input id="new-account-input" type="text" maxlength="16" data-i18n-placeholder="new_nick_ph" placeholder="Nowy nick (3-16 znaków)" />
+                  <button id="btn-add-account" class="btn-accent" type="button" data-i18n="btn_create_account">Dodaj konto</button>
+                  <button id="btn-open-accounts-modal" class="btn-outline" type="button" data-i18n="btn_manage_accounts">Zarządzaj kontami</button>
+                </div>
+                <p class="field-hint" data-i18n="nick_hint">Dozwolone litery, cyfry i podkreślnik (_).</p>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="card_saved_accounts_title">Zapisane konta graczy</h3>
+                </div>
+                <div id="settings-accounts-list" class="accounts-manager-list accounts-settings-list"></div>
+              </section>
+            </div>
+
+            <!-- PANE 5: CONSOLE -->
+            <div id="setting-pane-console" class="settings-pane" role="tabpanel">
+              <section class="settings-card console-card">
+                <div class="console-head-bar">
+                  <div class="console-status-pill">
+                    <span id="console-live-dot" class="console-dot"></span>
+                    <span id="console-status-text" data-i18n="console_ready">Status: gotowy</span>
+                  </div>
+                  <div id="console-level-filters" class="console-filter-pills">
+                    <button class="filter-pill active" type="button" data-level="all" data-i18n="console_all">Wszystkie</button>
+                    <button class="filter-pill" type="button" data-level="INFO">INFO</button>
+                    <button class="filter-pill" type="button" data-level="WARN">WARN</button>
+                    <button class="filter-pill" type="button" data-level="ERROR">ERROR</button>
+                    <button class="filter-pill" type="button" data-level="SYSTEM">SYSTEM</button>
+                  </div>
+                  <div class="console-actions">
+                    <input id="console-search-input" type="search" data-i18n-placeholder="console_search_ph" placeholder="Filtruj logi..." />
+                    <button id="btn-copy-logs" class="btn-outline" type="button" data-i18n="btn_copy_logs">Kopiuj logi</button>
+                    <button id="btn-clear-logs" class="btn-outline" type="button" data-i18n="btn_clear_logs">Wyczyść</button>
+                  </div>
+                </div>
+                <div id="console-output" class="console-output"></div>
+              </section>
             </div>
           </div>
-          <div id="console-output" class="console-output"></div>
         </div>
       </div>
     </section>
