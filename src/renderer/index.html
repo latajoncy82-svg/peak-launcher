@@ -63,14 +63,52 @@
         </div>
       </div>
 
-      <select id="topbar-lang-select" class="lang-pill" aria-label="Język / Language">
-        <option value="pl">PL</option>
-        <option value="en">EN</option>
-        <option value="de">DE</option>
-        <option value="es">ES</option>
-        <option value="fr">FR</option>
-        <option value="uk">UK</option>
-      </select>
+      <div class="lang-menu-wrap" id="topbar-lang-wrap">
+        <button id="topbar-lang-btn" class="lang-btn" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="topbar-lang-popover" aria-label="Język / Language">
+          <svg class="lang-globe" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="8" cy="8" r="6" />
+            <ellipse cx="8" cy="8" rx="2.6" ry="6" />
+            <path d="M2.2 8h11.6" />
+          </svg>
+          <span id="topbar-lang-code">PL</span>
+          <svg class="player-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 4.5L6 7.5L9 4.5" />
+          </svg>
+        </button>
+
+        <div id="topbar-lang-popover" class="lang-popover hidden" role="menu">
+          <button class="lang-popover-item" type="button" role="menuitem" data-lang-item="pl">
+            <span class="lang-item-code">PL</span>
+            <span class="lang-item-name">Polski</span>
+            <span class="lang-item-check" aria-hidden="true">✓</span>
+          </button>
+          <button class="lang-popover-item" type="button" role="menuitem" data-lang-item="en">
+            <span class="lang-item-code">EN</span>
+            <span class="lang-item-name">English</span>
+            <span class="lang-item-check" aria-hidden="true">✓</span>
+          </button>
+          <button class="lang-popover-item" type="button" role="menuitem" data-lang-item="de">
+            <span class="lang-item-code">DE</span>
+            <span class="lang-item-name">Deutsch</span>
+            <span class="lang-item-check" aria-hidden="true">✓</span>
+          </button>
+          <button class="lang-popover-item" type="button" role="menuitem" data-lang-item="es">
+            <span class="lang-item-code">ES</span>
+            <span class="lang-item-name">Español</span>
+            <span class="lang-item-check" aria-hidden="true">✓</span>
+          </button>
+          <button class="lang-popover-item" type="button" role="menuitem" data-lang-item="fr">
+            <span class="lang-item-code">FR</span>
+            <span class="lang-item-name">Français</span>
+            <span class="lang-item-check" aria-hidden="true">✓</span>
+          </button>
+          <button class="lang-popover-item" type="button" role="menuitem" data-lang-item="uk">
+            <span class="lang-item-code">UK</span>
+            <span class="lang-item-name">Українська</span>
+            <span class="lang-item-check" aria-hidden="true">✓</span>
+          </button>
+        </div>
+      </div>
 
       <button id="btn-theme-toggle" class="icon-btn" type="button" title="Przełącz motyw">
         <svg id="icon-sun" class="hidden" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
@@ -81,6 +119,8 @@
           <path d="M13.2 9.6A5.5 5.5 0 0 1 6.4 2.8a5.6 5.6 0 1 0 6.8 6.8z" />
         </svg>
       </button>
+
+      <span class="topbar-divider" aria-hidden="true"></span>
 
       <div class="win-controls">
         <button id="btn-win-min" class="win-btn" type="button" title="Minimalizuj">
@@ -752,7 +792,7 @@
                 <div class="diag-grid">
                   <div class="diag-card">
                     <span data-i18n="diag_version">Wersja launchera</span>
-                    <strong id="diag-version">v1.3.2</strong>
+                    <strong id="diag-version">v1.4.1</strong>
                   </div>
                   <div class="diag-card">
                     <span data-i18n="diag_ram">Pamięć systemu</span>

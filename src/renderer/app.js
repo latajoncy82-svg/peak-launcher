@@ -143,8 +143,11 @@
   function applyLanguageUI(lang) {
     if (!i18n) return;
     const clean = i18n.setLanguage(lang);
-    const topSel = $('topbar-lang-select');
-    if (topSel) topSel.value = clean;
+    const codeEl = $('topbar-lang-code');
+    if (codeEl) codeEl.textContent = clean.toUpperCase();
+    document.querySelectorAll('[data-lang-item]').forEach((item) => {
+      item.classList.toggle('active', item.dataset.langItem === clean);
+    });
     document.querySelectorAll('.lang-tile').forEach((tile) => {
       tile.classList.toggle('active', tile.dataset.langChoice === clean);
     });
@@ -186,6 +189,7 @@
           img.alt = safeName;
           img.src = headUrl;
           img.style.imageRendering = 'pixelated';
+          container.style.background = 'rgba(15, 23, 42, 0.45)';
           container.textContent = '';
           container.appendChild(img);
         })
@@ -198,8 +202,10 @@
     if (/^[a-zA-Z0-9_]{3,16}$/.test(safeName)) {
       const img = new Image();
       img.alt = safeName;
+      img.style.imageRendering = 'pixelated';
       img.onload = () => {
         if (img.naturalWidth >= 8 && container.dataset.avatarToken === token) {
+          container.style.background = 'rgba(15, 23, 42, 0.45)';
           container.textContent = '';
           container.appendChild(img);
         }
@@ -1010,7 +1016,7 @@
     const navAccCount = $('nav-accounts-count');
     if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
 
-    if ($('diag-version')) $('diag-version').textContent = 'v1.4.0';
+    if ($('diag-version')) $('diag-version').textContent = 'v1.4.1';
     if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
     if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
     if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
@@ -1118,6 +1124,23 @@
     }
   }
 
+  function closeLangPopover() {
+    const pop = $('topbar-lang-popover');
+    const btn = $('topbar-lang-btn');
+    if (pop) pop.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function toggleLangPopover() {
+    const pop = $('topbar-lang-popover');
+    const btn = $('topbar-lang-btn');
+    if (!pop || !btn) return;
+    const willOpen = pop.classList.contains('hidden');
+    if (willOpen) closeAccountPopover();
+    pop.classList.toggle('hidden', !willOpen);
+    btn.setAttribute('aria-expanded', String(willOpen));
+  }
+
   function closeAccountPopover() {
     const pop = $('topbar-account-popover');
     const btn = $('topbar-account-btn');
@@ -1130,7 +1153,10 @@
     const btn = $('topbar-account-btn');
     if (!pop || !btn) return;
     const willOpen = pop.classList.contains('hidden');
-    if (willOpen) renderAccountPopover();
+    if (willOpen) {
+      closeLangPopover();
+      renderAccountPopover();
+    }
     pop.classList.toggle('hidden', !willOpen);
     btn.setAttribute('aria-expanded', String(willOpen));
   }
@@ -1599,7 +1625,16 @@
       applyTheme(next);
     });
 
-    $('topbar-lang-select').addEventListener('change', (e) => changeLanguage(e.target.value));
+    $('topbar-lang-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleLangPopover();
+    });
+    document.querySelectorAll('[data-lang-item]').forEach((item) => {
+      item.addEventListener('click', async () => {
+        closeLangPopover();
+        await changeLanguage(item.dataset.langItem);
+      });
+    });
     document.querySelectorAll('.lang-tile').forEach((tile) => {
       tile.addEventListener('click', () => changeLanguage(tile.dataset.langChoice));
     });
@@ -1607,6 +1642,7 @@
     document.querySelectorAll('.top-nav-item').forEach((btn) => {
       btn.addEventListener('click', () => {
         closeAccountPopover();
+        closeLangPopover();
         switchView(btn.dataset.view);
       });
     });
@@ -1620,10 +1656,15 @@
       if (wrap && !wrap.contains(e.target)) {
         closeAccountPopover();
       }
+      const langWrap = $('topbar-lang-wrap');
+      if (langWrap && !langWrap.contains(e.target)) {
+        closeLangPopover();
+      }
     });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         closeAccountPopover();
+        closeLangPopover();
         $('modal-account').classList.add('hidden');
         $('modal-profile').classList.add('hidden');
         $('modal-mod-details').classList.add('hidden');
@@ -2362,7 +2403,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.4.0 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.4.1 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);
