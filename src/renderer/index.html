@@ -20,7 +20,7 @@
     <div class="cinema-vignette"></div>
   </div>
 
-  <!-- Minimal Floating Top Bar (No Sidebar!) -->
+  <!-- Minimal Floating Top Bar -->
   <header class="topbar">
     <div class="topbar-left">
       <img src="../../assets/icon-64.png" alt="Peak Launcher" class="topbar-icon" />
@@ -28,23 +28,32 @@
     </div>
 
     <nav class="topbar-nav" aria-label="Nawigacja główna">
-      <button class="top-nav-item active" type="button" data-view="play">Graj</button>
-      <button class="top-nav-item" type="button" data-view="mods">Mody</button>
-      <button class="top-nav-item" type="button" data-view="versions">Wersje</button>
+      <button class="top-nav-item active" type="button" data-view="play" data-i18n="nav_play">Graj</button>
+      <button class="top-nav-item" type="button" data-view="mods" data-i18n="nav_mods">Mody</button>
+      <button class="top-nav-item" type="button" data-view="versions" data-i18n="nav_versions">Wersje</button>
       <button class="top-nav-item" type="button" data-view="java">
-        Java i Fabric
-        <span class="nav-alert-dot hidden" id="nav-java-alert" title="Brak wymaganej Javy dla aktywnego profilu"></span>
+        <span data-i18n="nav_java">Java i Fabric</span>
+        <span class="nav-alert-dot hidden" id="nav-java-alert"></span>
       </button>
-      <button class="top-nav-item" type="button" data-view="console">Opcje</button>
+      <button class="top-nav-item" type="button" data-view="console" data-i18n="nav_options">Opcje</button>
     </nav>
 
     <div class="topbar-right">
-      <button id="topbar-account-btn" class="player-pill" type="button" title="Zmień nick gracza">
+      <button id="topbar-account-btn" class="player-pill" type="button">
         <span class="player-avatar-mini" id="topbar-avatar">P</span>
         <span class="player-nick" id="topbar-username">PeakPlayer</span>
       </button>
 
-      <button id="btn-theme-toggle" class="icon-btn" type="button" title="Przełącz motyw (Nocny Szczyt / Lodowcowy Dzień)">
+      <select id="topbar-lang-select" class="lang-pill" aria-label="Język / Language">
+        <option value="pl">PL</option>
+        <option value="en">EN</option>
+        <option value="de">DE</option>
+        <option value="es">ES</option>
+        <option value="fr">FR</option>
+        <option value="uk">UK</option>
+      </select>
+
+      <button id="btn-theme-toggle" class="icon-btn" type="button" title="Przełącz motyw">
         <svg id="icon-sun" class="hidden" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
           <circle cx="8" cy="8" r="3" />
           <path d="M8 1.5v1.4M8 13.1v1.4M1.5 8h1.4M13.1 8h1.4M3.4 3.4l1 1M11.6 11.6l1 1M12.6 3.4l-1 1M4.4 11.6l-1 1" />
@@ -75,7 +84,6 @@
       <div class="cinema-spacer"></div>
 
       <div class="cinema-bottom-stage">
-        <!-- Bottom-Left: Minimal Meta + Huge Clean Title + Translucent Profile Strip -->
         <div class="cinema-left">
           <div class="cinema-meta-row">
             <span class="cinema-meta-text">
@@ -89,7 +97,7 @@
             <button id="btn-quick-install-java" class="meta-action-pill hidden" type="button">
               Pobierz Javę
             </button>
-            <button id="btn-quick-install-fabric" class="meta-action-pill hidden" type="button">
+            <button id="btn-quick-install-fabric" class="meta-action-pill hidden" type="button" data-i18n="btn_install_fabric">
               Zainstaluj Fabric
             </button>
           </div>
@@ -98,20 +106,20 @@
 
           <div class="profile-strip-wrap">
             <div id="profiles-strip" class="profiles-strip"></div>
-            <button id="btn-new-profile" class="profile-pill profile-pill-add" type="button">+ Nowy</button>
+            <button id="btn-new-profile" class="profile-pill profile-pill-add" type="button" data-i18n="btn_new_profile">+ Nowy</button>
 
             <div class="active-profile-actions">
-              <button id="btn-hero-edit-profile" class="subtle-icon-btn" type="button" title="Edytuj aktywny profil" aria-label="Edytuj aktywny profil">
+              <button id="btn-hero-edit-profile" class="subtle-icon-btn" type="button" aria-label="Edytuj">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M11.2 2.4l2.4 2.4-8 8H3.2v-2.4l8-8z" />
                 </svg>
               </button>
-              <button id="btn-hero-open-folder" class="subtle-icon-btn" type="button" title="Otwórz folder profilu" aria-label="Otwórz folder profilu">
+              <button id="btn-hero-open-folder" class="subtle-icon-btn" type="button" aria-label="Folder">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.45" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M2 4.2A1.2 1.2 0 0 1 3.2 3h3l1.3 1.4h5.3A1.2 1.2 0 0 1 14 5.6v6.2a1.2 1.2 0 0 1-1.2 1.2H3.2A1.2 1.2 0 0 1 2 11.8V4.2z" />
                 </svg>
               </button>
-              <button id="btn-hero-delete-profile" class="subtle-icon-btn subtle-danger hidden" type="button" title="Usuń aktywny profil" aria-label="Usuń aktywny profil">
+              <button id="btn-hero-delete-profile" class="subtle-icon-btn subtle-danger hidden" type="button" aria-label="Usuń">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                   <path d="M4 4l8 8M12 4l-8 8" />
                 </svg>
@@ -120,7 +128,6 @@
           </div>
         </div>
 
-        <!-- Bottom-Right: Quiet Progress + Iconic Cinema GRAJ Button -->
         <div class="cinema-right">
           <div id="launch-progress-box" class="launch-progress-box hidden">
             <div class="progress-meta">
@@ -136,73 +143,96 @@
             <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path d="M5.5 3.8v12.4a.8.8 0 0 0 1.22.68l10.1-6.2a.8.8 0 0 0 0-1.36L6.72 3.12a.8.8 0 0 0-1.22.68z" />
             </svg>
-            <span id="btn-play-label">GRAJ</span>
+            <span id="btn-play-label" data-i18n="btn_play">GRAJ</span>
           </button>
         </div>
       </div>
     </section>
 
-    <!-- VIEW 2: MODS OVERLAY -->
+    <!-- VIEW 2: UPGRADED MODS DATABASE OVERLAY -->
     <section id="view-mods" class="view view-overlay">
       <div class="overlay-container">
         <div class="overlay-header">
           <div>
-            <h1>Mody</h1>
-            <p>Dodawaj mody z Modrinth jednym kliknięciem lub upuść pliki <code>.jar</code>.</p>
+            <h1 data-i18n="mods_title">Mody i Dodatki</h1>
+            <p data-i18n="mods_subtitle">Przeglądaj bazę Modrinth (Mody, Shadery, Paczki zasobów) lub upuść pliki .jar / .zip.</p>
           </div>
           <div class="overlay-header-actions">
             <select id="mods-profile-select"></select>
-            <button id="btn-mods-open-folder" class="btn-outline" type="button">Folder mods</button>
+            <button id="btn-mods-open-folder" class="btn-outline" type="button" data-i18n="folder_mods">Folder mods</button>
           </div>
         </div>
 
         <div id="mods-vanilla-callout" class="vanilla-callout hidden">
-          <span>Ten profil działa obecnie na czystym Minecraft (Vanilla). Przełącz na Fabric, aby używać modów.</span>
-          <button id="btn-switch-profile-fabric" class="btn-accent" type="button">Przełącz na Fabric</button>
+          <span data-i18n="vanilla_callout">Ten profil działa na czystym Minecraft (Vanilla). Przełącz na Fabric, aby używać modów.</span>
+          <button id="btn-switch-profile-fabric" class="btn-accent" type="button" data-i18n="switch_to_fabric">Przełącz na Fabric</button>
         </div>
 
         <div class="subtabs-bar">
-          <div class="subtabs">
-            <button class="subtab active" type="button" data-modtab="browse">Modrinth</button>
-            <button class="subtab" type="button" data-modtab="installed">
-              Zainstalowane (<span id="mods-tab-count">0</span>)
+          <div class="subtabs" id="mods-type-tabs">
+            <button class="subtab active" type="button" data-content-view="browse" data-ptype="mod" data-i18n="tab_modrinth_mods">Mody</button>
+            <button class="subtab" type="button" data-content-view="browse" data-ptype="shader" data-i18n="tab_modrinth_shaders">Shadery</button>
+            <button class="subtab" type="button" data-content-view="browse" data-ptype="resourcepack" data-i18n="tab_modrinth_packs">Paczki zasobów</button>
+            <button class="subtab" type="button" data-content-view="installed">
+              <span data-i18n="tab_installed">Zainstalowane</span> (<span id="mods-tab-count">0</span>)
             </button>
           </div>
-          <span id="mods-mc-pill" class="quiet-pill">Fabric · MC 26.3</span>
+          <div class="mods-meta-right">
+            <span id="mods-total-count" class="quiet-pill"></span>
+            <span id="mods-mc-pill" class="quiet-pill">Fabric · MC 26.3</span>
+          </div>
         </div>
 
         <div id="modtab-browse" class="modtab-panel active">
-          <div class="fps-compact-bar">
-            <div class="fps-compact-text">
-              <strong>Pakiet Peak FPS</strong>
-              <span>Fabric API + Sodium + Lithium + FerriteCore + Mod Menu</span>
+          <!-- Curated 1-Click Peak Packs Strip (for Mods) -->
+          <div id="curated-packs-bar" class="packs-strip">
+            <span class="packs-strip-label" data-i18n="packs_label">Szybkie paczki Peak:</span>
+            <div class="packs-strip-btns">
+              <button class="pack-btn" type="button" data-pack="fps" data-i18n="pack_fps">⚡ Peak FPS</button>
+              <button class="pack-btn" type="button" data-pack="shaders" data-i18n="pack_shaders">✨ Shadery (Iris)</button>
+              <button class="pack-btn" type="button" data-pack="qol" data-i18n="pack_qol">🧭 Survival+ QoL</button>
             </div>
-            <button id="btn-install-fps-pack" class="btn-emerald" type="button">Zainstaluj Pakiet FPS</button>
           </div>
 
           <div class="toolbar-row">
-            <input id="modrinth-search-input" class="search-input" type="search" placeholder="Szukaj modów (np. Sodium, Iris, Jade)..." />
-            <div class="filter-pills" id="modrinth-category-pills">
-              <button class="filter-pill active" type="button" data-cat="all">Popularne</button>
-              <button class="filter-pill" type="button" data-cat="optimization">Optymalizacja</button>
-              <button class="filter-pill" type="button" data-cat="utility">Narzędzia</button>
-              <button class="filter-pill" type="button" data-cat="adventure">Przygoda</button>
-              <button class="filter-pill" type="button" data-cat="worldgen">Świat</button>
-              <button class="filter-pill" type="button" data-cat="technology">Technologia</button>
-              <button class="filter-pill" type="button" data-cat="decoration">Dekoracje</button>
-            </div>
+            <input id="modrinth-search-input" class="search-input" type="search" data-i18n-placeholder="search_mods_ph" placeholder="Szukaj na Modrinth (np. Sodium, Iris, Complementary)..." />
+            <select id="modrinth-sort-select" class="sort-select">
+              <option value="auto" data-i18n="sort_auto">Sortowanie: Auto</option>
+              <option value="downloads" data-i18n="sort_downloads">Najpopularniejsze</option>
+              <option value="relevance" data-i18n="sort_relevance">Trafność</option>
+              <option value="updated" data-i18n="sort_updated">Zaktualizowane</option>
+              <option value="newest" data-i18n="sort_newest">Najnowsze</option>
+              <option value="follows" data-i18n="sort_follows">Obserwowane</option>
+            </select>
+          </div>
+
+          <div class="filter-pills" id="modrinth-category-pills">
+            <button class="filter-pill active" type="button" data-cat="all" data-i18n="cat_all">Wszystkie</button>
+            <button class="filter-pill" type="button" data-cat="optimization" data-i18n="cat_optimization">Optymalizacja</button>
+            <button class="filter-pill" type="button" data-cat="utility" data-i18n="cat_utility">Narzędzia</button>
+            <button class="filter-pill" type="button" data-cat="adventure" data-i18n="cat_adventure">Przygoda</button>
+            <button class="filter-pill" type="button" data-cat="worldgen" data-i18n="cat_worldgen">Świat</button>
+            <button class="filter-pill" type="button" data-cat="technology" data-i18n="cat_technology">Technologia</button>
+            <button class="filter-pill" type="button" data-cat="decoration" data-i18n="cat_decoration">Dekoracje</button>
           </div>
 
           <div id="modrinth-grid" class="modrinth-grid"></div>
+
+          <div id="modrinth-more-wrap" class="load-more-wrap hidden">
+            <button id="btn-modrinth-more" class="btn-outline" type="button">Pokaż więcej</button>
+          </div>
         </div>
 
         <div id="modtab-installed" class="modtab-panel">
           <div id="mods-dropzone" class="mods-dropzone">
             <div>
-              <strong>Przeciągnij i upuść pliki <code>.jar</code> tutaj</strong>
-              <p>lub wybierz pliki z dysku, aby dodać własne mody</p>
+              <strong data-i18n="dropzone_title">Przeciągnij i upuść pliki .jar lub .zip tutaj</strong>
+              <p data-i18n="dropzone_sub">lub wybierz pliki z dysku, aby dodać je do aktywnego profilu</p>
             </div>
-            <button id="btn-pick-jar-mods" class="btn-accent" type="button">Dodaj pliki .jar</button>
+            <div class="dropzone-actions">
+              <button id="btn-check-updates" class="btn-outline" type="button" data-i18n="btn_check_updates">Sprawdź i zaktualizuj mody</button>
+              <button id="btn-pick-jar-mods" class="btn-accent" type="button" data-i18n="btn_pick_files">Dodaj pliki</button>
+            </div>
           </div>
 
           <div id="installed-mods-list" class="installed-mods-list"></div>
@@ -215,22 +245,22 @@
       <div class="overlay-container">
         <div class="overlay-header">
           <div>
-            <h1>Wszystkie wersje Minecraft</h1>
+            <h1 data-i18n="versions_title">Wszystkie wersje Minecraft</h1>
             <p id="versions-subtitle">Pełny katalog Mojang — od Alphy i Bety po najnowsze wydania.</p>
           </div>
-          <button id="btn-refresh-manifest" class="btn-outline" type="button">Odśwież listę</button>
+          <button id="btn-refresh-manifest" class="btn-outline" type="button" data-i18n="btn_refresh">Odśwież listę</button>
         </div>
 
         <div class="toolbar-row">
-          <input id="versions-search" class="search-input" type="search" placeholder="Szukaj wersji, np. 26.3, 1.21.4, 1.12.2, b1.7.3..." />
+          <input id="versions-search" class="search-input" type="search" data-i18n-placeholder="search_versions_ph" placeholder="Szukaj wersji, np. 26.3, 1.21.4, 1.12.2, b1.7.3..." />
           <div class="filter-pills" id="versions-filter-pills">
-            <button class="filter-pill active" type="button" data-filter="all">Wszystkie</button>
-            <button class="filter-pill" type="button" data-filter="release">Stabilne</button>
-            <button class="filter-pill" type="button" data-filter="snapshot">Snapshoty</button>
-            <button class="filter-pill" type="button" data-filter="old_beta">Beta</button>
-            <button class="filter-pill" type="button" data-filter="old_alpha">Alpha</button>
-            <button class="filter-pill" type="button" data-filter="fabric">Fabric</button>
-            <button class="filter-pill" type="button" data-filter="installed">Zainstalowane</button>
+            <button class="filter-pill active" type="button" data-filter="all" data-i18n="filter_all">Wszystkie</button>
+            <button class="filter-pill" type="button" data-filter="release" data-i18n="filter_release">Stabilne</button>
+            <button class="filter-pill" type="button" data-filter="snapshot" data-i18n="filter_snapshot">Snapshoty</button>
+            <button class="filter-pill" type="button" data-filter="old_beta" data-i18n="filter_beta">Beta</button>
+            <button class="filter-pill" type="button" data-filter="old_alpha" data-i18n="filter_alpha">Alpha</button>
+            <button class="filter-pill" type="button" data-filter="fabric" data-i18n="filter_fabric">Fabric</button>
+            <button class="filter-pill" type="button" data-filter="installed" data-i18n="filter_installed">Zainstalowane</button>
           </div>
         </div>
 
@@ -238,13 +268,13 @@
           <table class="versions-table">
             <thead>
               <tr>
-                <th>Wersja</th>
-                <th>Typ</th>
-                <th>Data wydania</th>
-                <th>Java</th>
-                <th>Fabric</th>
-                <th>Status</th>
-                <th class="th-actions">Akcja</th>
+                <th data-i18n="th_version">Wersja</th>
+                <th data-i18n="th_type">Typ</th>
+                <th data-i18n="th_date">Data wydania</th>
+                <th data-i18n="th_java">Java</th>
+                <th data-i18n="th_fabric">Fabric</th>
+                <th data-i18n="th_status">Status</th>
+                <th class="th-actions" data-i18n="th_action">Akcja</th>
               </tr>
             </thead>
             <tbody id="versions-tbody"></tbody>
@@ -261,10 +291,10 @@
       <div class="overlay-container">
         <div class="overlay-header">
           <div>
-            <h1>Java i Fabric</h1>
-            <p>Automatyczne środowiska Eclipse Temurin oraz instalator Fabric Loadera.</p>
+            <h1 data-i18n="java_title">Java i Fabric</h1>
+            <p data-i18n="java_sub">Automatyczne środowiska Eclipse Temurin oraz instalator Fabric Loadera.</p>
           </div>
-          <button id="btn-rescan-java" class="btn-outline" type="button">Skanuj system</button>
+          <button id="btn-rescan-java" class="btn-outline" type="button" data-i18n="btn_rescan">Skanuj system</button>
         </div>
 
         <div id="java-install-progress" class="inline-progress hidden">
@@ -279,25 +309,24 @@
 
         <div id="java-cards-grid" class="java-cards-grid"></div>
 
-        <!-- Clean Horizontal Fabric Installer Bar -->
         <div class="fabric-bar-card">
           <div class="fabric-bar-fields">
             <label>
-              <span>Wersja Minecraft</span>
+              <span data-i18n="fabric_mc_ver">Wersja Minecraft</span>
               <select id="fabric-mc-select"></select>
             </label>
             <label>
-              <span>Fabric Loader</span>
+              <span data-i18n="fabric_loader_ver">Fabric Loader</span>
               <select id="fabric-loader-select">
-                <option value="latest">Najnowszy stabilny</option>
+                <option value="latest" data-i18n="fabric_latest_stable">Najnowszy stabilny</option>
               </select>
             </label>
             <label class="checkbox-row fabric-api-check">
               <input id="fabric-also-api" type="checkbox" checked />
-              <span>Dodaj Fabric API</span>
+              <span data-i18n="fabric_add_api">Dodaj Fabric API</span>
             </label>
           </div>
-          <button id="btn-install-fabric-manual" class="btn-accent" type="button">Zainstaluj Fabric</button>
+          <button id="btn-install-fabric-manual" class="btn-accent" type="button" data-i18n="btn_install_fabric">Zainstaluj Fabric</button>
         </div>
 
         <div id="fabric-progress-box" class="inline-progress hidden">
@@ -312,11 +341,11 @@
 
         <div class="two-col-lists">
           <div class="sheet-card">
-            <h3>Wykryte środowiska Java</h3>
+            <h3 data-i18n="detected_javas_title">Wykryte środowiska Java</h3>
             <div id="detected-java-list" class="compact-list"></div>
           </div>
           <div class="sheet-card">
-            <h3>Zainstalowane wersje Fabric</h3>
+            <h3 data-i18n="installed_fabric_title">Zainstalowane wersje Fabric</h3>
             <div id="installed-fabric-list" class="compact-list"></div>
           </div>
         </div>
@@ -328,39 +357,51 @@
       <div class="overlay-container">
         <div class="overlay-header">
           <div>
-            <h1>Opcje i Konsola</h1>
-            <p>Ustawienia motywu, pamięci RAM, kont graczy oraz podgląd logów Minecrafta.</p>
+            <h1 data-i18n="options_title">Opcje i Konsola</h1>
+            <p data-i18n="options_sub">Język, motyw, pamięć RAM, konta graczy oraz podgląd logów Minecrafta.</p>
           </div>
           <div class="subtabs">
-            <button class="subtab active" type="button" data-consoletab="settings">Ustawienia</button>
-            <button class="subtab" type="button" data-consoletab="logs">Konsola gry</button>
+            <button class="subtab active" type="button" data-consoletab="settings" data-i18n="tab_settings">Ustawienia</button>
+            <button class="subtab" type="button" data-consoletab="logs" data-i18n="tab_console">Konsola gry</button>
           </div>
         </div>
 
         <div id="consoletab-settings" class="modtab-panel active">
           <div class="settings-grid">
             <div class="sheet-card">
-              <h3>Motyw</h3>
+              <h3 data-i18n="card_appearance">Wygląd i Język</h3>
+              <label class="stack-field">
+                <span data-i18n="label_language">Język launchera</span>
+                <select id="setting-lang-select">
+                  <option value="pl">Polski (PL)</option>
+                  <option value="en">English (EN)</option>
+                  <option value="de">Deutsch (DE)</option>
+                  <option value="es">Español (ES)</option>
+                  <option value="fr">Français (FR)</option>
+                  <option value="uk">Українська (UK)</option>
+                </select>
+              </label>
+
               <div class="theme-cards">
                 <button id="card-theme-dark" class="theme-option active" type="button" data-theme-choice="alpine-dark">
                   <span class="theme-swatch swatch-dark"></span>
                   <div>
-                    <strong>Nocny Szczyt</strong>
-                    <span>Ciemny kinowy</span>
+                    <strong data-i18n="theme_dark_name">Nocny Szczyt</strong>
+                    <span data-i18n="theme_dark_sub">Ciemny kinowy</span>
                   </div>
                 </button>
                 <button id="card-theme-light" class="theme-option" type="button" data-theme-choice="alpine-light">
                   <span class="theme-swatch swatch-light"></span>
                   <div>
-                    <strong>Lodowcowy Dzień</strong>
-                    <span>Jasny alpejski</span>
+                    <strong data-i18n="theme_light_name">Lodowcowy Dzień</strong>
+                    <span data-i18n="theme_light_sub">Jasny alpejski</span>
                   </div>
                 </button>
               </div>
 
               <div class="ram-control">
                 <div class="ram-head">
-                  <span>Przydzielony RAM</span>
+                  <span data-i18n="label_ram">Przydzielony RAM</span>
                   <strong id="setting-ram-value">4096 MB</strong>
                 </div>
                 <input id="setting-ram-slider" type="range" min="1024" max="16384" step="512" value="4096" />
@@ -369,55 +410,55 @@
 
               <label class="checkbox-row">
                 <input id="setting-custom-res" type="checkbox" />
-                <span>Własna rozdzielczość okna gry</span>
+                <span data-i18n="custom_res">Własna rozdzielczość okna gry</span>
               </label>
               <div class="form-grid two">
                 <label>
-                  <span>Szerokość (px)</span>
+                  <span data-i18n="label_width">Szerokość (px)</span>
                   <input id="setting-width" type="number" min="640" max="3840" value="1280" />
                 </label>
                 <label>
-                  <span>Wysokość (px)</span>
+                  <span data-i18n="label_height">Wysokość (px)</span>
                   <input id="setting-height" type="number" min="480" max="2160" value="720" />
                 </label>
               </div>
             </div>
 
             <div class="sheet-card">
-              <h3>Automatyzacja, Konta i Dane</h3>
+              <h3 data-i18n="card_automation">Automatyzacja, Konta i Dane</h3>
               <label class="checkbox-row">
                 <input id="setting-auto-java" type="checkbox" checked />
-                <span>Automatycznie pobieraj brakującą Javę (8 / 17 / 21 / 25)</span>
+                <span data-i18n="auto_java">Automatycznie pobieraj brakującą Javę (8 / 17 / 21 / 25)</span>
               </label>
               <label class="checkbox-row">
                 <input id="setting-auto-fabric" type="checkbox" checked />
-                <span>Automatycznie instaluj Fabric Loadera dla profili z modami</span>
+                <span data-i18n="auto_fabric">Automatycznie instaluj Fabric Loadera dla profili z modami</span>
               </label>
               <label class="checkbox-row">
                 <input id="setting-close-launch" type="checkbox" />
-                <span>Zminimalizuj launcher po uruchomieniu gry</span>
+                <span data-i18n="close_on_launch">Zminimalizuj launcher po uruchomieniu gry</span>
               </label>
               <label class="stack-field">
-                <span>Dodatkowe argumenty JVM (opcjonalnie)</span>
+                <span data-i18n="label_jvm">Dodatkowe argumenty JVM (opcjonalnie)</span>
                 <input id="setting-jvm-args" type="text" placeholder="np. -XX:+UseG1GC" />
               </label>
               <div>
-                <button id="btn-save-settings" class="btn-accent" type="button">Zapisz ustawienia</button>
+                <button id="btn-save-settings" class="btn-accent" type="button" data-i18n="btn_save_settings">Zapisz ustawienia</button>
               </div>
 
               <div class="divider-line"></div>
 
               <div class="account-add-row">
-                <input id="new-account-input" type="text" maxlength="16" placeholder="Nowy nick (3-16 znaków)" />
-                <button id="btn-add-account" class="btn-outline" type="button">Dodaj nick</button>
+                <input id="new-account-input" type="text" maxlength="16" data-i18n-placeholder="new_nick_ph" placeholder="Nowy nick (3-16 znaków)" />
+                <button id="btn-add-account" class="btn-outline" type="button" data-i18n="btn_add_nick">Dodaj nick</button>
               </div>
               <div id="settings-accounts-list" class="compact-list"></div>
 
               <div class="datadir-box">
                 <code id="setting-datadir-path">...</code>
                 <div class="datadir-actions">
-                  <button id="btn-change-datadir" class="btn-outline" type="button">Zmień folder</button>
-                  <button id="btn-open-datadir" class="btn-outline" type="button">Otwórz</button>
+                  <button id="btn-change-datadir" class="btn-outline" type="button" data-i18n="btn_change_dir">Zmień folder</button>
+                  <button id="btn-open-datadir" class="btn-outline" type="button" data-i18n="btn_open_dir">Otwórz</button>
                 </div>
               </div>
             </div>
@@ -426,10 +467,10 @@
 
         <div id="consoletab-logs" class="modtab-panel">
           <div class="console-toolbar">
-            <span id="console-status-text">Status: gotowy</span>
+            <span id="console-status-text" data-i18n="console_ready">Status: gotowy</span>
             <div class="console-actions">
-              <button id="btn-copy-logs" class="btn-outline" type="button">Kopiuj logi</button>
-              <button id="btn-clear-logs" class="btn-outline" type="button">Wyczyść</button>
+              <button id="btn-copy-logs" class="btn-outline" type="button" data-i18n="btn_copy_logs">Kopiuj logi</button>
+              <button id="btn-clear-logs" class="btn-outline" type="button" data-i18n="btn_clear_logs">Wyczyść</button>
             </div>
           </div>
           <div id="console-output" class="console-output"></div>
@@ -438,45 +479,78 @@
     </section>
   </main>
 
+  <!-- MODAL: MODRINTH PROJECT DETAILS & VERSION PICKER -->
+  <div id="modal-mod-details" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="mod-details-title">
+    <div class="modal-card modal-lg">
+      <div class="modal-header">
+        <div class="mod-details-head-meta">
+          <img id="mod-details-icon" src="../../assets/icon-64.png" alt="" class="mod-details-icon" />
+          <div>
+            <h2 id="mod-details-title">Mod</h2>
+            <span id="mod-details-author" class="mod-author"></span>
+          </div>
+        </div>
+        <button id="modal-details-close" class="modal-close" type="button" aria-label="Zamknij">×</button>
+      </div>
+      <div class="modal-body" id="mod-details-body">
+        <p id="mod-details-desc" class="mod-details-desc"></p>
+        <div class="mod-details-stats">
+          <span id="mod-details-downloads" class="quiet-pill"></span>
+          <span id="mod-details-followers" class="quiet-pill"></span>
+          <span id="mod-details-license" class="quiet-pill"></span>
+        </div>
+        <label class="stack-field">
+          <span data-i18n="details_version_label">Wybierz wersję do instalacji</span>
+          <select id="mod-details-version-select"></select>
+        </label>
+        <div id="mod-details-deps" class="field-hint"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="mod-details-open-web" class="btn-outline" type="button" data-i18n="details_open_modrinth">Otwórz na Modrinth ↗</button>
+        <button id="mod-details-install-btn" class="btn-accent" type="button" data-i18n="details_install_btn">Zainstaluj wybraną wersję</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: CREATE / EDIT PROFILE -->
   <div id="modal-profile" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-profile-title">
     <div class="modal-card">
       <div class="modal-header">
-        <h2 id="modal-profile-title">Nowy profil</h2>
+        <h2 id="modal-profile-title" data-i18n="modal_profile_new">Nowy profil</h2>
         <button id="modal-profile-close" class="modal-close" type="button" aria-label="Zamknij">×</button>
       </div>
       <div class="modal-body">
         <label class="stack-field">
-          <span>Nazwa profilu</span>
-          <input id="prof-name-input" type="text" placeholder="np. Alpejska Ekspedycja 1.21.4" />
+          <span data-i18n="label_profile_name">Nazwa profilu</span>
+          <input id="prof-name-input" type="text" data-i18n-placeholder="profile_name_ph" placeholder="np. Alpejska Ekspedycja 1.21.4" />
         </label>
 
         <div class="form-grid two">
           <label class="stack-field">
-            <span>Filtruj wersje Minecraft</span>
-            <input id="prof-mc-filter" type="search" placeholder="Wpisz numer, np. 1.21.4 lub 26.3" />
+            <span data-i18n="label_filter_mc">Filtruj wersje Minecraft</span>
+            <input id="prof-mc-filter" type="search" data-i18n-placeholder="filter_mc_ph" placeholder="Wpisz numer, np. 1.21.4 lub 26.3" />
           </label>
           <label class="stack-field">
-            <span>Wersja Minecraft</span>
+            <span data-i18n="label_mc_ver">Wersja Minecraft</span>
             <select id="prof-mc-select"></select>
           </label>
         </div>
 
         <div class="loader-radio-group">
-          <span class="group-label">Modloader</span>
+          <span class="group-label" data-i18n="label_modloader">Modloader</span>
           <div class="loader-options">
             <label class="loader-choice">
               <input type="radio" name="prof-loader" value="fabric" checked />
               <div>
-                <strong>Fabric (Zalecany do modów)</strong>
-                <span>Mody Modrinth, Sodium i Shadery</span>
+                <strong>Fabric</strong>
+                <span data-i18n="fabric_desc">Mody Modrinth, Sodium i Shadery</span>
               </div>
             </label>
             <label class="loader-choice">
               <input type="radio" name="prof-loader" value="vanilla" />
               <div>
-                <strong>Vanilla (Czysty Minecraft)</strong>
-                <span>Oryginalna gra bez modów</span>
+                <strong>Vanilla</strong>
+                <span data-i18n="vanilla_desc">Oryginalna gra bez modów</span>
               </div>
             </label>
           </div>
@@ -484,21 +558,21 @@
 
         <div id="prof-fabric-options">
           <label class="stack-field">
-            <span>Wersja Fabric Loadera</span>
+            <span data-i18n="label_fabric_loader">Wersja Fabric Loadera</span>
             <select id="prof-fabric-select">
-              <option value="latest">Najnowszy stabilny (zalecane)</option>
+              <option value="latest" data-i18n="fabric_latest_stable">Najnowszy stabilny</option>
             </select>
           </label>
         </div>
 
         <label class="stack-field">
-          <span>Pamięć RAM dla profilu (opcjonalnie)</span>
-          <input id="prof-ram-input" type="number" min="512" max="32768" step="256" placeholder="Domyślna z ustawień" />
+          <span data-i18n="label_profile_ram">Pamięć RAM dla profilu (opcjonalnie)</span>
+          <input id="prof-ram-input" type="number" min="512" max="32768" step="256" data-i18n-placeholder="profile_ram_ph" placeholder="Domyślna z ustawień" />
         </label>
       </div>
       <div class="modal-footer">
-        <button id="modal-profile-cancel" class="btn-outline" type="button">Anuluj</button>
-        <button id="modal-profile-save" class="btn-accent" type="button">Zapisz profil</button>
+        <button id="modal-profile-cancel" class="btn-outline" type="button" data-i18n="btn_cancel">Anuluj</button>
+        <button id="modal-profile-save" class="btn-accent" type="button" data-i18n="btn_save_profile">Zapisz profil</button>
       </div>
     </div>
   </div>
@@ -507,25 +581,26 @@
   <div id="modal-account" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-account-title">
     <div class="modal-card modal-sm">
       <div class="modal-header">
-        <h2 id="modal-account-title">Nick gracza (Offline)</h2>
+        <h2 id="modal-account-title" data-i18n="modal_nick_title">Nick gracza (Offline)</h2>
         <button id="modal-account-close" class="modal-close" type="button" aria-label="Zamknij">×</button>
       </div>
       <div class="modal-body">
         <label class="stack-field">
-          <span>Nazwa gracza w Minecraft (3–16 znaków)</span>
+          <span data-i18n="label_nick_input">Nazwa gracza w Minecraft (3–16 znaków)</span>
           <input id="account-nick-input" type="text" maxlength="16" placeholder="PeakPlayer" />
         </label>
-        <p class="field-hint">Dozwolone litery, cyfry i podkreślnik (<code>_</code>).</p>
+        <p class="field-hint" data-i18n="nick_hint">Dozwolone litery, cyfry i podkreślnik (_).</p>
       </div>
       <div class="modal-footer">
-        <button id="modal-account-cancel" class="btn-outline" type="button">Anuluj</button>
-        <button id="modal-account-save" class="btn-accent" type="button">Ustaw nick</button>
+        <button id="modal-account-cancel" class="btn-outline" type="button" data-i18n="btn_cancel">Anuluj</button>
+        <button id="modal-account-save" class="btn-accent" type="button" data-i18n="btn_set_nick">Ustaw nick</button>
       </div>
     </div>
   </div>
 
   <div id="toast-stack" class="toast-stack" aria-live="polite"></div>
 
+  <script src="./i18n.js"></script>
   <script src="./fx.js"></script>
   <script src="./app.js"></script>
 </body>

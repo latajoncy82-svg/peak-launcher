@@ -19,14 +19,22 @@ const {
   listInstalledFabric
 } = require('./engine/fabricManager');
 const {
+  getContentDir,
   getProfileModsDir,
+  listProfileContent,
   listProfileMods,
+  toggleContent,
   toggleMod,
+  deleteContent,
   deleteMod,
+  importLocalContent,
   importLocalMods,
   searchModrinth,
-  installModrinthMod,
-  installPeakFpsPack
+  getModrinthProjectDetails,
+  installModrinthContent,
+  installCuratedPack,
+  installPeakFpsPack,
+  checkAndUpdateProfileMods
 } = require('./engine/modsManager');
 const {
   getLaunchStatus,
@@ -38,6 +46,15 @@ const APP_ID = 'com.peaklauncher.app';
 const ROOT_DIR = path.resolve(__dirname, '..');
 const ICON_ICO_PATH = path.join(ROOT_DIR, 'assets', 'icon.ico');
 const CAPTURE_MODE = process.argv.includes('--capture-screenshots');
+
+function getRuntimeIconPath() {
+  if (app.isPackaged) {
+    const unpackedIco = path.join(process.resourcesPath, 'app.asar.unpacked', 'assets', 'icon.ico');
+    if (fs.existsSync(unpackedIco)) return unpackedIco;
+    return process.execPath;
+  }
+  return ICON_ICO_PATH;
+}
 
 if (process.platform === 'win32') {
   app.setAppUserModelId(APP_ID);
@@ -100,9 +117,10 @@ function registerIpcHandlers() {
   });
   handleIpc('window:isMaximized', () => Boolean(mainWindow && mainWindow.isMaximized()));
 
-  // State, settings, theme, accounts
+  // State, settings, theme, language, accounts
   handleIpc('state:get', () => buildStatePayload());
   handleIpc('theme:set', (_e, theme) => store.setTheme(theme));
+  handleIpc('language:set', (_e, lang) => store.setLanguage(lang));
   handleIpc('settings:update', (_e, patch) => {
     store.updateSettings(patch);
     ensureDataTree(store.getDataDir());
@@ -214,15 +232,30 @@ function registerIpcHandlers() {
   });
   handleIpc('fabric:listInstalled', () => listInstalledFabric(store.getDataDir()));
 
-  // Mods
+  // Mods & Content (Mods / Shaders / Resource Packs)
   handleIpc('mods:list', (_e, profileId) =>
     listProfileMods(store.getDataDir(), profileId || store.getActiveProfile().id)
+  );
+  handleIpc('mods:listContent', (_e, profileId, projectType = 'mod') =>
+    listProfileContent(store.getDataDir(), profileId || store.getActiveProfile().id, projectType)
   );
   handleIpc('mods:toggle', (_e, profileId, fileName, enabled) =>
     toggleMod(store.getDataDir(), profileId || store.getActiveProfile().id, fileName, enabled)
   );
+  handleIpc('mods:toggleContent', (_e, profileId, fileName, enabled, projectType = 'mod') =>
+    toggleContent(
+      store.getDataDir(),
+      profileId || store.getActiveProfile().id,
+      fileName,
+      enabled,
+      projectType
+    )
+  );
   handleIpc('mods:delete', (_e, profileId, fileName) =>
     deleteMod(store.getDataDir(), profileId || store.getActiveProfile().id, fileName)
+  );
+  handleIpc('mods:deleteContent', (_e, profileId, fileName, projectType = 'mod') =>
+    deleteContent(store.getDataDir(), profileId || store.getActiveProfile().id, fileName, projectType)
   );
   handleIpc('mods:pickAndImport', async (_e, profileId) => {
     const targetId = profileId || store.getActiveProfile().id;
@@ -239,17 +272,58 @@ function registerIpcHandlers() {
       ...importLocalMods(store.getDataDir(), targetId, filePaths)
     };
   });
+  handleIpc('mods:pickAndImportContent', async (_e, profileId, projectType = 'mod') => {
+    const targetId = profileId || store.getActiveProfile().id;
+    const extensions = projectType === 'mod' ? ['jar'] : ['zip', 'jar'];
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      properties: ['openFile', 'multiSelections'],
+      filters: [{ name: 'Pliki pakietów / modów', extensions }]
+    });
+    if (canceled || !filePaths || filePaths.length === 0) {
+      return {
+        canceled: true,
+        imported: [],
+        mods: listProfileContent(store.getDataDir(), targetId, projectType)
+      };
+    }
+    return {
+      canceled: false,
+      ...importLocalContent(store.getDataDir(), targetId, filePaths, projectType)
+    };
+  });
   handleIpc('mods:importPaths', (_e, profileId, filePaths) => {
     const targetId = profileId || store.getActiveProfile().id;
     return importLocalMods(store.getDataDir(), targetId, filePaths);
   });
+  handleIpc('mods:importContentPaths', (_e, profileId, filePaths, projectType = 'mod') => {
+    const targetId = profileId || store.getActiveProfile().id;
+    return importLocalContent(store.getDataDir(), targetId, filePaths, projectType);
+  });
   handleIpc('mods:search', (_e, params) => searchModrinth(params || {}));
+  handleIpc('mods:details', (_e, params) => {
+    const { projectId, mcVersion, projectType = 'mod' } = params || {};
+    const targetProfile = store.getActiveProfile();
+    return getModrinthProjectDetails(
+      projectId,
+      mcVersion || targetProfile?.mcVersion || '',
+      projectType
+    );
+  });
   handleIpc('mods:installModrinth', async (_e, params) => {
-    const { projectId, mcVersion, profileId, projectMeta } = params || {};
+    const {
+      projectId,
+      versionId = null,
+      projectType = 'mod',
+      mcVersion,
+      profileId,
+      projectMeta
+    } = params || {};
     const targetProfile = profileId ? store.getProfile(profileId) : store.getActiveProfile();
     const targetMc = mcVersion || targetProfile.mcVersion;
-    const res = await installModrinthMod({
+    const res = await installModrinthContent({
       projectId,
+      versionId,
+      projectType,
       mcVersion: targetMc,
       dataDir: store.getDataDir(),
       profileId: targetProfile.id,
@@ -258,7 +332,7 @@ function registerIpcHandlers() {
     });
     return {
       ...res,
-      mods: listProfileMods(store.getDataDir(), targetProfile.id)
+      mods: listProfileContent(store.getDataDir(), targetProfile.id, projectType)
     };
   });
   handleIpc('mods:installPeakFpsPack', async (_e, profileId) => {
@@ -270,8 +344,46 @@ function registerIpcHandlers() {
       onProgress: (p) => sendToRenderer('mods:progress', p)
     });
   });
+  handleIpc('mods:installPack', async (_e, profileId, packId = 'fps') => {
+    const targetProfile = profileId ? store.getProfile(profileId) : store.getActiveProfile();
+    return installCuratedPack({
+      packId,
+      mcVersion: targetProfile.mcVersion,
+      dataDir: store.getDataDir(),
+      profileId: targetProfile.id,
+      onProgress: (p) => sendToRenderer('mods:progress', p)
+    });
+  });
+  handleIpc('mods:checkUpdates', (_e, profileId) => {
+    const targetProfile = profileId ? store.getProfile(profileId) : store.getActiveProfile();
+    return checkAndUpdateProfileMods({
+      mcVersion: targetProfile.mcVersion,
+      dataDir: store.getDataDir(),
+      profileId: targetProfile.id,
+      applyUpdates: false
+    });
+  });
+  handleIpc('mods:updateAll', (_e, profileId) => {
+    const targetProfile = profileId ? store.getProfile(profileId) : store.getActiveProfile();
+    return checkAndUpdateProfileMods({
+      mcVersion: targetProfile.mcVersion,
+      dataDir: store.getDataDir(),
+      profileId: targetProfile.id,
+      applyUpdates: true,
+      onProgress: (p) => sendToRenderer('mods:progress', p)
+    });
+  });
   handleIpc('mods:openFolder', async (_e, profileId) => {
     const dir = getProfileModsDir(store.getDataDir(), profileId || store.getActiveProfile().id);
+    await shell.openPath(dir);
+    return dir;
+  });
+  handleIpc('mods:openContentFolder', async (_e, profileId, projectType = 'mod') => {
+    const dir = getContentDir(
+      store.getDataDir(),
+      profileId || store.getActiveProfile().id,
+      projectType
+    );
     await shell.openPath(dir);
     return dir;
   });
@@ -377,6 +489,7 @@ async function runScreenshotCapture() {
 
 function createWindow() {
   const initialTheme = store ? store.getState().theme : 'alpine-dark';
+  const runtimeIconPath = getRuntimeIconPath();
   mainWindow = new BrowserWindow({
     width: 1320,
     height: 830,
@@ -385,7 +498,7 @@ function createWindow() {
     frame: false,
     show: false,
     backgroundColor: initialTheme === 'alpine-light' ? '#EEF4FB' : '#070D17',
-    icon: ICON_ICO_PATH,
+    icon: runtimeIconPath,
     title: 'Peak Launcher',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -394,13 +507,23 @@ function createWindow() {
     }
   });
 
-  if (process.platform === 'win32' && typeof mainWindow.setAppDetails === 'function') {
-    mainWindow.setAppDetails({
-      appId: APP_ID,
-      appIconPath: ICON_ICO_PATH,
-      relaunchDisplayName: 'Peak Launcher',
-      relaunchCommand: `"${process.execPath}"`
-    });
+  if (process.platform === 'win32') {
+    if (typeof mainWindow.setIcon === 'function') {
+      mainWindow.setIcon(runtimeIconPath);
+    }
+    if (typeof mainWindow.setAppDetails === 'function') {
+      const taskbarIconPath = app.isPackaged ? process.execPath : ICON_ICO_PATH;
+      const relaunchCommand = app.isPackaged
+        ? `"${process.execPath}"`
+        : `"${process.execPath}" "${ROOT_DIR}"`;
+      mainWindow.setAppDetails({
+        appId: APP_ID,
+        appIconPath: taskbarIconPath,
+        appIconIndex: 0,
+        relaunchDisplayName: 'Peak Launcher',
+        relaunchCommand
+      });
+    }
   }
 
   mainWindow.on('maximize', () => sendToRenderer('window:maximizedChanged', true));

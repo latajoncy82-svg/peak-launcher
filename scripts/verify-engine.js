@@ -15,10 +15,16 @@ const {
 } = require('../src/engine/fabricManager');
 const {
   searchModrinth,
+  getModrinthProjectDetails,
+  installModrinthContent,
   installModrinthMod,
+  listProfileContent,
   listProfileMods,
+  toggleContent,
   toggleMod,
-  deleteMod
+  deleteContent,
+  deleteMod,
+  checkAndUpdateProfileMods
 } = require('../src/engine/modsManager');
 const { buildLaunchSpec, ensureNativesTree } = require('../src/engine/launcher');
 
@@ -38,10 +44,17 @@ async function runVerification() {
   fs.mkdirSync(VERIFY_DIR, { recursive: true });
 
   try {
-    console.log('1. Testowanie Store i offline UUID...');
+    console.log('1. Testowanie Store, języków i offline UUID...');
     const store = new Store();
     const state = store.getState();
     assert(state.profiles.length >= 3, 'Brak domyślnych profili');
+    for (const lang of ['pl', 'en', 'de', 'es', 'fr', 'uk']) {
+      const savedLang = store.setLanguage(lang);
+      assert.strictEqual(savedLang, lang, `Nie zapisano języka ${lang}`);
+      assert.strictEqual(store.getState().language, lang);
+    }
+    assert.strictEqual(store.setLanguage('invalid'), 'pl', 'Niepoprawny język powinien wrócić do pl');
+    store.setLanguage('pl');
     const uuid = computeOfflineUuid('PeakPlayer');
     assert(/^[0-9a-f]{8}-[0-9a-f]{4}-3[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(uuid), 'Niepoprawny UUID v3');
     const dataDir = store.getDataDir();
@@ -75,12 +88,29 @@ async function runVerification() {
     assert(fs.existsSync(fabricRes263.jsonPath), 'Nie zapisano profilu Fabric 26.3');
     console.log(`   -> Zainstalowano ${fabricRes1214.id} i ${fabricRes263.id}`);
 
-    console.log('5. Testowanie wyszukiwania Modrinth i instalacji + przełączania + usuwania moda...');
+    console.log('5. Testowanie bazy Modrinth (mody, shadery, paczki zasobów, paginacja, szczegóły, aktualizacje)...');
     const searchRes = await searchModrinth({ query: 'sodium', mcVersion: '1.21.4', limit: 5 });
     assert(searchRes.hits.length > 0, 'Brak wyników Modrinth dla Sodium 1.21.4');
+    const page1 = await searchModrinth({ query: '', projectType: 'mod', mcVersion: '1.21.4', offset: 0, limit: 24, sort: 'downloads' });
+    const page2 = await searchModrinth({ query: '', projectType: 'mod', mcVersion: '1.21.4', offset: 24, limit: 24, sort: 'downloads' });
+    assert(page1.hits.length === 24 && page1.hasMore === true && page1.totalHits > 24, 'Paginacja strona 1 nie działa');
+    assert(page2.hits.length > 0 && page2.hits[0].projectId !== page1.hits[0].projectId, 'Paginacja offset 24 zwróciła identyczne wyniki');
+
+    const shaderSearch = await searchModrinth({ query: '', projectType: 'shader', mcVersion: '1.21.4', offset: 0, limit: 8, sort: 'downloads' });
+    assert(shaderSearch.hits.length > 0, 'Brak wyników shaderów z Modrinth');
+    const rpSearch = await searchModrinth({ query: '', projectType: 'resourcepack', mcVersion: '1.21.4', offset: 0, limit: 8, sort: 'downloads' });
+    assert(rpSearch.hits.length > 0, 'Brak wyników resource packów z Modrinth');
+
     const sodiumHit = searchRes.hits[0];
-    const installRes = await installModrinthMod({
+    const sodiumDetails = await getModrinthProjectDetails(sodiumHit.projectId, '1.21.4', 'mod');
+    assert(sodiumDetails && sodiumDetails.title && sodiumDetails.versions.length >= 1, 'Brak szczegółów projektu lub wersji z Modrinth');
+
+    // Zainstaluj starszą wersję (jeśli dostępna), żeby przetestować też aktualizację 1 klikiem i brak duplikatów
+    const olderVersion = sodiumDetails.versions.find((v, idx) => idx > 0 && v.versionType === 'release') || sodiumDetails.versions[1] || null;
+    const installRes = await installModrinthContent({
       projectId: sodiumHit.projectId,
+      versionId: olderVersion ? olderVersion.id : null,
+      projectType: 'mod',
       mcVersion: '1.21.4',
       dataDir,
       profileId: 'peak-fabric-1214',
@@ -89,20 +119,52 @@ async function runVerification() {
     assert(installRes.installed.length >= 1, 'Nie zainstalowano pliku Sodium');
     let modsList = listProfileMods(dataDir, 'peak-fabric-1214');
     assert(modsList.length >= 1, 'Lista modów jest pusta');
-    const firstMod = modsList[0];
+    const firstMod = modsList.find((m) => m.projectId === sodiumHit.projectId) || modsList[0];
     assert(firstMod.enabled === true && firstMod.name, 'Brak metadanych moda');
 
-    modsList = toggleMod(dataDir, 'peak-fabric-1214', firstMod.fileName, false);
-    const disabledMod = modsList.find((m) => m.baseFileName === firstMod.baseFileName);
+    if (olderVersion && olderVersion.id !== sodiumDetails.versions[0].id) {
+      const checkBefore = await checkAndUpdateProfileMods({ mcVersion: '1.21.4', dataDir, profileId: 'peak-fabric-1214', applyUpdates: false });
+      assert(checkBefore.checked >= 1 && checkBefore.updatesAvailable.length >= 1, 'Nie wykryto dostępnej aktualizacji Sodium');
+      const applyRes = await checkAndUpdateProfileMods({ mcVersion: '1.21.4', dataDir, profileId: 'peak-fabric-1214', applyUpdates: true });
+      assert(applyRes.updated.length >= 1, 'Aktualizacja 1 klikiem nie zaktualizowała Sodium');
+      const sodiumMatches = listProfileMods(dataDir, 'peak-fabric-1214').filter((m) => m.projectId === sodiumHit.projectId);
+      assert.strictEqual(sodiumMatches.length, 1, `Wykryto duplikaty moda po aktualizacji: ${sodiumMatches.length}`);
+    } else {
+      const checkOnly = await checkAndUpdateProfileMods({ mcVersion: '1.21.4', dataDir, profileId: 'peak-fabric-1214', applyUpdates: false });
+      assert(checkOnly.checked >= 1, 'checkAndUpdateProfileMods nie sprawdził zainstalowanego moda');
+    }
+
+    modsList = listProfileMods(dataDir, 'peak-fabric-1214');
+    const currentSodium = modsList.find((m) => m.projectId === sodiumHit.projectId) || modsList[0];
+    modsList = toggleMod(dataDir, 'peak-fabric-1214', currentSodium.fileName, false);
+    const disabledMod = modsList.find((m) => m.baseFileName === currentSodium.baseFileName);
     assert(disabledMod && disabledMod.enabled === false && disabledMod.fileName.endsWith('.disabled'), 'Wyłączenie moda nie zadziałało');
 
     modsList = toggleMod(dataDir, 'peak-fabric-1214', disabledMod.fileName, true);
-    const reenabledMod = modsList.find((m) => m.baseFileName === firstMod.baseFileName);
+    const reenabledMod = modsList.find((m) => m.baseFileName === currentSodium.baseFileName);
     assert(reenabledMod && reenabledMod.enabled === true, 'Ponowne włączenie moda nie zadziałało');
 
     modsList = deleteMod(dataDir, 'peak-fabric-1214', reenabledMod.fileName);
-    assert(!modsList.some((m) => m.baseFileName === firstMod.baseFileName), 'Usunięcie moda nie zadziałało');
-    console.log('   -> Instalacja Modrinth, odczyt fabric.mod.json, wyłączanie/włączanie i usuwanie OK.');
+    assert(!modsList.some((m) => m.baseFileName === currentSodium.baseFileName), 'Usunięcie moda nie zadziałało');
+
+    // Przetestuj także shader/resourcepack content flow (installModrinthContent + listProfileContent + toggleContent + deleteContent)
+    const testShader = shaderSearch.hits[0];
+    const shaderInstall = await installModrinthContent({
+      projectId: testShader.projectId,
+      projectType: 'shader',
+      mcVersion: '1.21.4',
+      dataDir,
+      profileId: 'peak-fabric-1214',
+      projectMeta: testShader
+    });
+    assert(shaderInstall.installed.length >= 1, 'Nie zainstalowano shadera z Modrinth');
+    let shaderList = listProfileContent(dataDir, 'peak-fabric-1214', 'shader');
+    assert(shaderList.length >= 1, 'Lista shaderów jest pusta');
+    shaderList = toggleContent(dataDir, 'peak-fabric-1214', shaderList[0].fileName, false, 'shader');
+    assert(shaderList[0].enabled === false, 'Wyłączenie shadera nie zadziałało');
+    shaderList = deleteContent(dataDir, 'peak-fabric-1214', shaderList[0].fileName, 'shader');
+    assert.strictEqual(shaderList.length, 0, 'Usunięcie shadera nie zadziałało');
+    console.log('   -> Mody, shadery, resource packi, paginacja, szczegóły i aktualizacje OK.');
 
     console.log('6. Testowanie budowania specyfikacji uruchomienia (26.3 Fabric, 1.21.4 Fabric, 1.12.2, b1.7.3)...');
     const account = store.getActiveAccount();

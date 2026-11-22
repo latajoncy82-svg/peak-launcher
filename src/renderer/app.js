@@ -1,5 +1,7 @@
 (() => {
   const api = window.peakAPI;
+  const i18n = window.PeakI18n;
+  const t = (key, vars) => (i18n ? i18n.t(key, vars) : key);
 
   const state = {
     appState: null,
@@ -9,31 +11,40 @@
     javaData: { list: [], byMajor: {} },
     adoptiumInfo: {},
     mods: [],
+    installedContent: [],
     modrinthHits: [],
+    modrinthTotalHits: 0,
+    modrinthHasMore: false,
+    modrinthFallbackAll: false,
     modrinthLoading: false,
     modrinthQuery: '',
     modrinthCategory: 'all',
+    modrinthSort: 'auto',
+    modrinthOffset: 0,
+    contentProjectType: 'mod',
+    modsSubView: 'browse',
     versionsFilter: 'all',
     versionsSearch: '',
     versionsLimit: 80,
     activeView: 'play',
     editingProfileId: null,
+    activeModDetails: null,
     logs: [],
     javaDownloadingMajor: null
   };
 
   const JAVA_DESCRIPTIONS = {
-    25: 'Minecraft 26.x i najnowsze snapshoty',
+    25: 'Minecraft 26.x+',
     21: 'Minecraft 1.20.5 – 1.21.11',
     17: 'Minecraft 1.17 – 1.20.4',
-    8: 'Minecraft 1.16.5 i starsze (Beta/Alpha)'
+    8: 'Minecraft ≤ 1.16.5 (Beta/Alpha)'
   };
 
   const TYPE_LABELS = {
-    release: 'Stabilna',
+    release: 'Release',
     snapshot: 'Snapshot',
-    old_beta: 'Stara Beta',
-    old_alpha: 'Stara Alpha'
+    old_beta: 'Beta',
+    old_alpha: 'Alpha'
   };
 
   const TYPE_PILL_CLASS = {
@@ -51,7 +62,7 @@
     div.className = `toast ${type}`;
     div.textContent = message;
     stack.appendChild(div);
-    setTimeout(() => div.remove(), 4000);
+    setTimeout(() => div.remove(), 4200);
   }
 
   function appendLog(entry) {
@@ -88,6 +99,15 @@
     if (/^1\.21|^1\.20\.[56]/.test(String(mcVersion))) return 21;
     if (/^1\.(1[7-9]|20)/.test(String(mcVersion))) return 17;
     return 8;
+  }
+
+  function applyLanguageUI(lang) {
+    if (!i18n) return;
+    const clean = i18n.setLanguage(lang);
+    const topSel = $('topbar-lang-select');
+    const setSel = $('setting-lang-select');
+    if (topSel) topSel.value = clean;
+    if (setSel) setSel.value = clean;
   }
 
   function applyTheme(theme) {
@@ -163,11 +183,16 @@
           ? `FABRIC ${profile.fabricVersion}`
           : 'FABRIC'
         : 'VANILLA';
+
     const modCount = state.mods.length;
-    const modWord = modCount === 1 ? 'MOD' : modCount >= 2 && modCount <= 4 ? 'MODY' : 'MODÓW';
+    const modWord =
+      modCount === 1
+        ? t('mod_singular')
+        : modCount >= 2 && modCount <= 4
+          ? t('mod_few')
+          : t('mod_many');
     $('btn-hero-go-mods').textContent = `${modCount} ${modWord}`;
 
-    // Readiness pills shown ONLY when missing
     const reqJava = getRequiredJavaForMc(profile.mcVersion);
     const hasJava = Boolean(state.javaData.byMajor[reqJava]);
     const javaBtn = $('btn-quick-install-java');
@@ -175,7 +200,7 @@
       javaBtn.classList.add('hidden');
       $('nav-java-alert').classList.add('hidden');
     } else {
-      javaBtn.textContent = `Pobierz Javę ${reqJava}`;
+      javaBtn.textContent = t('btn_install_java', { major: reqJava });
       javaBtn.dataset.major = String(reqJava);
       javaBtn.classList.remove('hidden');
       $('nav-java-alert').classList.remove('hidden');
@@ -187,13 +212,13 @@
         (f) => f.inheritsFrom === profile.mcVersion
       );
       fabBtn.classList.toggle('hidden', Boolean(installed));
+      fabBtn.textContent = t('btn_install_fabric');
     } else {
       fabBtn.classList.add('hidden');
     }
 
     $('btn-hero-delete-profile').classList.toggle('hidden', state.appState.profiles.length <= 1);
 
-    // Minimal Profile Strip
     const strip = $('profiles-strip');
     strip.innerHTML = '';
     for (const p of state.appState.profiles) {
@@ -218,24 +243,24 @@
     if (launchStatus && launchStatus.running) {
       btn.disabled = false;
       btn.classList.add('running');
-      lbl.textContent = 'ZATRZYMAJ';
+      lbl.textContent = t('btn_stop');
       progBox.classList.add('hidden');
     } else if (launchStatus && launchStatus.preparing) {
       btn.disabled = true;
       btn.classList.remove('running');
-      lbl.textContent = 'START...';
+      lbl.textContent = t('btn_starting');
       progBox.classList.remove('hidden');
     } else {
       btn.disabled = false;
       btn.classList.remove('running');
-      lbl.textContent = 'GRAJ';
+      lbl.textContent = t('btn_play');
     }
   }
 
   function renderVersionsTable() {
     const tbody = $('versions-tbody');
     if (!state.manifest) {
-      tbody.innerHTML = '<tr><td colspan="7">Ładowanie listy wersji Mojang...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7">...</td></tr>';
       return;
     }
 
@@ -251,8 +276,11 @@
       return true;
     });
 
-    $('versions-subtitle').textContent =
-      `Wyświetlono ${Math.min(filtered.length, state.versionsLimit)} z ${filtered.length} pasujących wersji (łącznie ${state.manifest.versions.length} w bazie Mojang).`;
+    $('versions-subtitle').textContent = t('versions_sub', {
+      shown: Math.min(filtered.length, state.versionsLimit),
+      filtered: filtered.length,
+      total: state.manifest.versions.length
+    });
 
     const slice = filtered.slice(0, state.versionsLimit);
     tbody.innerHTML = '';
@@ -261,8 +289,9 @@
       const tr = document.createElement('tr');
       const isInstalled = installedSet.has(v.id);
       const hasFabric = state.fabricVersionsSet.has(v.id);
+      const locale = i18n ? i18n.getLanguage() : 'pl';
       const dateStr = v.releaseTime
-        ? new Date(v.releaseTime).toLocaleDateString('pl-PL')
+        ? new Date(v.releaseTime).toLocaleDateString(locale)
         : '—';
       const pillClass = TYPE_PILL_CLASS[v.type] ?? 'vanilla';
       tr.innerHTML = `
@@ -271,9 +300,9 @@
         <td>${dateStr}</td>
         <td>Java ${v.recommendedJava}</td>
         <td>${hasFabric ? '<span class="tag-pill mods">Fabric OK</span>' : '<span style="color:var(--text-dim)">—</span>'}</td>
-        <td>${isInstalled ? '<span class="readiness-ok">Zainstalowana</span>' : '<span style="color:var(--text-dim)">Do pobrania</span>'}</td>
+        <td>${isInstalled ? `<span class="readiness-ok">${t('status_installed')}</span>` : `<span style="color:var(--text-dim)">${t('status_to_download')}</span>`}</td>
         <td class="td-actions">
-          <button class="btn-outline" type="button" data-ver-create="${v.id}">Utwórz profil</button>
+          <button class="btn-outline" type="button" data-ver-create="${v.id}">${t('btn_create_profile')}</button>
         </td>
       `;
       tr.querySelector('button[data-ver-create]').addEventListener('click', () => {
@@ -291,7 +320,9 @@
     const moreWrap = $('versions-more-wrap');
     if (filtered.length > slice.length) {
       moreWrap.classList.remove('hidden');
-      $('btn-versions-more').textContent = `Pokaż więcej (${filtered.length - slice.length} pozostało)`;
+      $('btn-versions-more').textContent = t('btn_show_more', {
+        left: filtered.length - slice.length
+      });
     } else {
       moreWrap.classList.add('hidden');
     }
@@ -310,18 +341,35 @@
       sel.appendChild(opt);
     }
 
-    $('mods-vanilla-callout').classList.toggle('hidden', profile.loader === 'fabric');
+    const ptype = state.contentProjectType;
+    const folderBtn = $('btn-mods-open-folder');
+    folderBtn.textContent =
+      ptype === 'shader'
+        ? t('folder_shaders')
+        : ptype === 'resourcepack'
+          ? t('folder_resourcepacks')
+          : t('folder_mods');
+
+    $('mods-vanilla-callout').classList.toggle(
+      'hidden',
+      profile.loader === 'fabric' || ptype !== 'mod'
+    );
+    $('curated-packs-bar').classList.toggle('hidden', ptype !== 'mod');
+    $('modrinth-category-pills').classList.toggle('hidden', ptype !== 'mod');
+    $('btn-check-updates').classList.toggle('hidden', ptype !== 'mod');
+
     $('mods-mc-pill').textContent = `${profile.loader === 'fabric' ? 'Fabric' : 'Vanilla'} · MC ${profile.mcVersion}`;
-    $('mods-tab-count').textContent = String(state.mods.length);
+    const activeList = state.installedContent || state.mods;
+    $('mods-tab-count').textContent = String(activeList.length);
 
     const listEl = $('installed-mods-list');
     listEl.innerHTML = '';
-    if (state.mods.length === 0) {
-      listEl.innerHTML = `<div class="empty-state">Brak zainstalowanych modów w profilu <strong>${profile.name}</strong>. Dodaj mody w zakładce Modrinth lub przeciągnij plik <code>.jar</code> powyżej.</div>`;
+    if (activeList.length === 0) {
+      listEl.innerHTML = `<div class="empty-state">${t('empty_installed', { name: profile.name })}</div>`;
       return;
     }
 
-    for (const mod of state.mods) {
+    for (const mod of activeList) {
       const row = document.createElement('div');
       row.className = `installed-mod-row ${mod.enabled ? '' : 'disabled'}`;
       const sizeKb = Math.max(1, Math.round(mod.size / 1024));
@@ -336,17 +384,24 @@
           </div>
         </div>
         <div class="installed-mod-actions">
-          <label class="switch" title="${mod.enabled ? 'Wyłącz mod' : 'Włącz mod'}">
+          <label class="switch">
             <input type="checkbox" ${mod.enabled ? 'checked' : ''} />
             <span class="slider"></span>
           </label>
-          <button class="btn-danger-sm" type="button">Usuń</button>
+          <button class="btn-danger-sm" type="button">${t('btn_remove')}</button>
         </div>
       `;
       row.querySelector('.installed-mod-info strong').textContent = mod.name;
       row.querySelector('input[type="checkbox"]').addEventListener('change', async (e) => {
         try {
-          state.mods = await api.toggleMod(profile.id, mod.fileName, e.target.checked);
+          const updated = await api.toggleContent(
+            profile.id,
+            mod.fileName,
+            e.target.checked,
+            ptype
+          );
+          state.installedContent = updated;
+          if (ptype === 'mod') state.mods = updated;
           renderModsHeaderAndInstalled();
           renderPlayView();
         } catch (err) {
@@ -355,11 +410,12 @@
       });
       row.querySelector('.btn-danger-sm').addEventListener('click', async () => {
         try {
-          state.mods = await api.deleteMod(profile.id, mod.fileName);
+          const updated = await api.deleteContent(profile.id, mod.fileName, ptype);
+          state.installedContent = updated;
+          if (ptype === 'mod') state.mods = updated;
           renderModsHeaderAndInstalled();
           renderModrinthGrid();
           renderPlayView();
-          showToast(`Usunięto mod ${mod.name}.`, 'info');
         } catch (err) {
           showToast(err.message, 'error');
         }
@@ -368,31 +424,46 @@
     }
   }
 
-  function formatDownloads(num) {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M pobrań`;
-    if (num >= 1000) return `${(num / 1000).toFixed(0)}k pobrań`;
-    return `${num} pobrań`;
+  function formatCount(num) {
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 1000) return `${(num / 1000).toFixed(0)}k`;
+    return String(num);
   }
 
   function renderModrinthGrid() {
     const grid = $('modrinth-grid');
     const profile = getActiveProfile();
-    if (state.modrinthLoading) {
-      grid.innerHTML = '<div class="empty-state">Wyszukiwanie modów na Modrinth...</div>';
-      return;
+    const totalEl = $('mods-total-count');
+    const moreWrap = $('modrinth-more-wrap');
+
+    if (totalEl) {
+      totalEl.textContent = state.modrinthTotalHits
+        ? state.modrinthFallbackAll
+          ? `${t('results_count', { count: state.modrinthTotalHits.toLocaleString() })} · ${t('fallback_all_versions')}`
+          : t('results_count', { count: state.modrinthTotalHits.toLocaleString() })
+        : '';
     }
-    if (!state.modrinthHits || state.modrinthHits.length === 0) {
-      grid.innerHTML = `<div class="empty-state">Brak wyników dla Minecraft ${profile?.mcVersion || ''} w wybranym filtrze.</div>`;
+
+    if (state.modrinthLoading && state.modrinthOffset === 0) {
+      grid.innerHTML = `<div class="empty-state">${t('searching_modrinth')}</div>`;
+      moreWrap.classList.add('hidden');
       return;
     }
 
-    const installedIds = new Set(state.mods.map((m) => m.projectId).filter(Boolean));
+    if (!state.modrinthHits || state.modrinthHits.length === 0) {
+      grid.innerHTML = `<div class="empty-state">${t('empty_search', { mc: profile?.mcVersion || '' })}</div>`;
+      moreWrap.classList.add('hidden');
+      return;
+    }
+
+    const activeInstalled = state.installedContent || state.mods;
+    const installedIds = new Set(activeInstalled.map((m) => m.projectId).filter(Boolean));
     grid.innerHTML = '';
 
     for (const hit of state.modrinthHits) {
       const isInstalled = installedIds.has(hit.projectId);
       const card = document.createElement('div');
-      card.className = 'mod-card';
+      card.className = 'mod-card clickable';
       card.innerHTML = `
         <div class="mod-card-head">
           <img class="mod-icon" src="${hit.iconUrl || '../../assets/icon-64.png'}" alt="" loading="lazy" />
@@ -403,9 +474,9 @@
         </div>
         <p class="mod-desc"></p>
         <div class="mod-card-foot">
-          <span class="mod-downloads">${formatDownloads(hit.downloads)}</span>
+          <span class="mod-downloads">${t('downloads_fmt', { val: formatCount(hit.downloads) })}</span>
           <button class="${isInstalled ? 'btn-outline' : 'btn-accent'}" type="button" ${isInstalled ? 'disabled' : ''}>
-            ${isInstalled ? 'Dodany ✓' : 'Dodaj'}
+            ${isInstalled ? t('btn_added') : t('btn_add')}
           </button>
         </div>
       `;
@@ -414,103 +485,195 @@
       card.querySelector('.mod-desc').textContent = hit.description || '';
 
       const addBtn = card.querySelector('button');
+      card.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        openModDetailsModal(hit);
+      });
+
       if (!isInstalled) {
-        addBtn.addEventListener('click', async () => {
-          addBtn.disabled = true;
-          addBtn.textContent = 'Pobieranie...';
-          try {
-            if (profile.loader !== 'fabric') {
-              await api.enableFabricOnProfile(profile.id, 'latest');
-              state.appState = await api.getState();
-            }
-            const res = await api.installModrinthMod({
-              projectId: hit.projectId,
-              mcVersion: profile.mcVersion,
-              profileId: profile.id,
-              projectMeta: hit
-            });
-            state.mods = res.mods;
-            const depCount = res.dependenciesInstalled?.length || 0;
-            showToast(
-              depCount > 0
-                ? `Dodano ${hit.title} (+${depCount} wymagane zależności)!`
-                : `Dodano mod ${hit.title}!`,
-              'success'
-            );
-            renderModsHeaderAndInstalled();
-            renderModrinthGrid();
-            renderPlayView();
-          } catch (err) {
-            addBtn.disabled = false;
-            addBtn.textContent = 'Dodaj';
-            showToast(err.message, 'error');
-          }
+        addBtn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          await installHitDirect(hit, null, addBtn);
         });
       }
       grid.appendChild(card);
     }
+
+    if (state.modrinthHasMore) {
+      moreWrap.classList.remove('hidden');
+      const left = Math.max(0, state.modrinthTotalHits - state.modrinthHits.length);
+      $('btn-modrinth-more').textContent = t('btn_show_more', { left: left.toLocaleString() });
+    } else {
+      moreWrap.classList.add('hidden');
+    }
   }
 
-  async function searchModrinthCatalog() {
+  async function installHitDirect(hit, versionId = null, btnEl = null) {
     const profile = getActiveProfile();
     if (!profile) return;
+    const ptype = hit.projectType || state.contentProjectType || 'mod';
+    if (btnEl) {
+      btnEl.disabled = true;
+      btnEl.textContent = t('btn_downloading');
+    }
+    try {
+      if (ptype === 'mod' && profile.loader !== 'fabric') {
+        await api.enableFabricOnProfile(profile.id, 'latest');
+        state.appState = await api.getState();
+      }
+      const res = await api.installModrinthMod({
+        projectId: hit.projectId,
+        versionId,
+        projectType: ptype,
+        mcVersion: profile.mcVersion,
+        profileId: profile.id,
+        projectMeta: hit
+      });
+      state.installedContent = res.mods;
+      if (ptype === 'mod') state.mods = res.mods;
+      showToast(t('toast_mod_added', { title: hit.title }), 'success');
+      renderModsHeaderAndInstalled();
+      renderModrinthGrid();
+      renderPlayView();
+    } catch (err) {
+      if (btnEl) {
+        btnEl.disabled = false;
+        btnEl.textContent = t('btn_add');
+      }
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function openModDetailsModal(hit) {
+    const profile = getActiveProfile();
+    const ptype = hit.projectType || state.contentProjectType || 'mod';
+    $('mod-details-icon').src = hit.iconUrl || '../../assets/icon-64.png';
+    $('mod-details-title').textContent = hit.title;
+    $('mod-details-author').textContent = hit.author || '';
+    $('mod-details-desc').textContent = hit.description || '';
+    $('mod-details-downloads').textContent = t('downloads_fmt', { val: formatCount(hit.downloads || 0) });
+    $('mod-details-followers').textContent = '';
+    $('mod-details-license').textContent = '';
+    $('mod-details-version-select').innerHTML = `<option value="">${t('searching_modrinth')}</option>`;
+    $('mod-details-deps').textContent = '';
+    $('mod-details-install-btn').disabled = true;
+    $('modal-mod-details').classList.remove('hidden');
+
+    try {
+      const details = await api.getModDetails({
+        projectId: hit.projectId,
+        mcVersion: profile?.mcVersion || '',
+        projectType: ptype
+      });
+      state.activeModDetails = details;
+      if (details.author) $('mod-details-author').textContent = details.author;
+      $('mod-details-downloads').textContent = t('downloads_fmt', { val: formatCount(details.downloads) });
+      $('mod-details-followers').textContent = t('followers_fmt', { val: formatCount(details.followers) });
+      $('mod-details-license').textContent = details.license || '';
+
+      const sel = $('mod-details-version-select');
+      sel.innerHTML = '';
+      if (!details.versions || details.versions.length === 0) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = t('details_no_versions');
+        sel.appendChild(opt);
+        $('mod-details-install-btn').disabled = true;
+      } else {
+        for (const v of details.versions) {
+          const opt = document.createElement('option');
+          opt.value = v.id;
+          opt.textContent = `${v.versionNumber} (${v.versionType})`;
+          sel.appendChild(opt);
+        }
+        $('mod-details-install-btn').disabled = false;
+        const firstDeps = details.versions[0]?.dependencies?.length || 0;
+        $('mod-details-deps').textContent = firstDeps > 0 ? t('details_deps', { count: firstDeps }) : '';
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
+
+  async function searchModrinthCatalog({ append = false } = {}) {
+    const profile = getActiveProfile();
+    if (!profile) return;
+    if (!append) {
+      state.modrinthOffset = 0;
+      state.modrinthHits = [];
+    }
     state.modrinthLoading = true;
     renderModrinthGrid();
     try {
       const res = await api.searchModrinth({
         query: state.modrinthQuery,
         mcVersion: profile.mcVersion,
-        category: state.modrinthCategory,
+        category: state.contentProjectType === 'mod' ? state.modrinthCategory : 'all',
+        projectType: state.contentProjectType,
+        sort: state.modrinthSort,
+        offset: state.modrinthOffset,
         limit: 24
       });
-      state.modrinthHits = res.hits || [];
+      state.modrinthHits = append ? [...state.modrinthHits, ...(res.hits || [])] : res.hits || [];
+      state.modrinthTotalHits = res.totalHits || state.modrinthHits.length;
+      state.modrinthHasMore = Boolean(res.hasMore);
+      state.modrinthFallbackAll = Boolean(res.fallbackAllVersions);
     } catch (err) {
-      state.modrinthHits = [];
-      showToast(`Błąd wyszukiwania Modrinth: ${err.message}`, 'error');
+      if (!append) state.modrinthHits = [];
+      showToast(`${t('error_prefix')}: ${err.message}`, 'error');
     } finally {
       state.modrinthLoading = false;
       renderModrinthGrid();
     }
   }
 
-  async function loadModsAndCatalog() {
-    await refreshActiveProfileMods();
-    renderModsHeaderAndInstalled();
-    await searchModrinthCatalog();
-  }
-
-  async function refreshActiveProfileMods() {
+  async function refreshActiveContent() {
     const profile = getActiveProfile();
     if (!profile) return;
-    state.mods = await api.listMods(profile.id);
+    const [modsList, contentList] = await Promise.all([
+      api.listMods(profile.id),
+      state.contentProjectType === 'mod'
+        ? Promise.resolve(null)
+        : api.listContent(profile.id, state.contentProjectType)
+    ]);
+    state.mods = modsList;
+    state.installedContent = contentList || modsList;
   }
 
-  async function runFpsPackInstall(triggerBtn) {
+  async function loadModsAndCatalog() {
+    await refreshActiveContent();
+    renderModsHeaderAndInstalled();
+    if (state.modsSubView === 'browse') {
+      await searchModrinthCatalog({ append: false });
+    }
+  }
+
+  async function runCuratedPackInstall(packId, triggerBtn) {
     const profile = getActiveProfile();
     if (!profile) return;
     const origText = triggerBtn ? triggerBtn.textContent : '';
-    if (triggerBtn) {
-      triggerBtn.disabled = true;
-      triggerBtn.textContent = 'Instalowanie...';
-    }
+    document.querySelectorAll('.pack-btn').forEach((b) => (b.disabled = true));
+    if (triggerBtn) triggerBtn.textContent = t('installing');
     try {
       if (profile.loader !== 'fabric') {
         await api.enableFabricOnProfile(profile.id, 'latest');
         state.appState = await api.getState();
       }
-      const res = await api.installPeakFpsPack(profile.id);
+      const res = await api.installPack(profile.id, packId);
       state.mods = res.mods;
+      state.installedContent = res.mods;
       renderModsHeaderAndInstalled();
       renderModrinthGrid();
       renderPlayView();
-      showToast(`Zainstalowano ${res.installed.length} modów z pakietu Peak FPS!`, 'success');
+      showToast(
+        t('toast_pack_done', { title: res.packTitle, count: res.installed.length }),
+        'success'
+      );
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
-      if (triggerBtn) {
-        triggerBtn.disabled = false;
-        triggerBtn.textContent = origText;
-      }
+      document.querySelectorAll('.pack-btn').forEach((b) => (b.disabled = false));
+      if (triggerBtn) triggerBtn.textContent = origText;
     }
   }
 
@@ -529,11 +692,11 @@
       card.innerHTML = `
         <div class="java-card-top">
           <strong>Java ${major}</strong>
-          <span class="tag-pill ${detected ? 'mods' : 'vanilla'}">${detected ? 'Gotowa ✓' : 'Brak'}</span>
+          <span class="tag-pill ${detected ? 'mods' : 'vanilla'}">${detected ? t('java_ready') : t('java_missing')}</span>
         </div>
         <div class="java-card-sub">${JAVA_DESCRIPTIONS[major]}</div>
         <div class="java-status ${detected ? 'readiness-ok' : 'readiness-warn'}">
-          ${detected ? `${detected.rawVersion} (${detected.source === 'managed' ? 'Peak' : 'System'})` : 'Nie wykryto w systemie'}
+          ${detected ? `${detected.rawVersion} (${detected.source === 'managed' ? 'Peak' : 'System'})` : t('java_not_detected')}
         </div>
         <div class="java-card-sub">
           ${adoptium && adoptium.size ? `Adoptium Temurin · ${(adoptium.size / 1048576).toFixed(1)} MB` : 'Eclipse Temurin JRE x64'}
@@ -546,13 +709,12 @@
         const rmBtn = document.createElement('button');
         rmBtn.className = 'btn-danger-sm';
         rmBtn.type = 'button';
-        rmBtn.textContent = 'Usuń wersję Peak';
+        rmBtn.textContent = t('java_remove_peak');
         rmBtn.addEventListener('click', async () => {
           const res = await api.removeJava(major);
           state.javaData = res.detected;
           renderJavaAndFabricView();
           renderPlayView();
-          showToast(`Usunięto Javę ${major} z folderu Peak.`, 'info');
         });
         actionsEl.appendChild(rmBtn);
       } else {
@@ -561,10 +723,10 @@
         dlBtn.type = 'button';
         dlBtn.disabled = busy || state.javaDownloadingMajor !== null;
         dlBtn.textContent = busy
-          ? 'Pobieranie...'
+          ? t('btn_downloading')
           : detected
-            ? 'Pobierz też dla Peak'
-            : `Pobierz Javę ${major}`;
+            ? t('java_get_peak')
+            : t('java_get', { major });
         dlBtn.addEventListener('click', () => triggerJavaInstall(major));
         actionsEl.appendChild(dlBtn);
       }
@@ -574,7 +736,7 @@
     const detList = $('detected-java-list');
     detList.innerHTML = '';
     if (state.javaData.list.length === 0) {
-      detList.innerHTML = '<div class="compact-row">Nie wykryto jeszcze żadnej Javy na komputerze.</div>';
+      detList.innerHTML = `<div class="compact-row">${t('no_java_detected')}</div>`;
     } else {
       for (const j of state.javaData.list) {
         const row = document.createElement('div');
@@ -595,7 +757,7 @@
       for (const fv of state.fabricVersionsList.slice(0, 120)) {
         const opt = document.createElement('option');
         opt.value = fv.version;
-        opt.textContent = fv.stable ? `${fv.version} (Stabilna)` : `${fv.version} (Snapshot)`;
+        opt.textContent = fv.stable ? `${fv.version} (Release)` : `${fv.version} (Snapshot)`;
         fabSelect.appendChild(opt);
       }
       const active = getActiveProfile();
@@ -609,7 +771,7 @@
     fabList.innerHTML = '';
     const installedFab = state.appState?.installedFabric || [];
     if (installedFab.length === 0) {
-      fabList.innerHTML = '<div class="compact-row">Brak pobranych wersji Fabric (zainstaluje się automatycznie przy starcie).</div>';
+      fabList.innerHTML = `<div class="compact-row">${t('no_fabric_installed')}</div>`;
     } else {
       for (const f of installedFab) {
         const row = document.createElement('div');
@@ -619,7 +781,7 @@
             <strong>Minecraft ${f.inheritsFrom} · Fabric ${f.loaderVersion}</strong>
             <span>${f.id}</span>
           </div>
-          <span class="tag-pill mods">Gotowy</span>
+          <span class="tag-pill mods">OK</span>
         `;
         fabList.appendChild(row);
       }
@@ -628,13 +790,13 @@
 
   async function loadFabricLoaderOptions(mcVersion, selectEl) {
     if (!mcVersion) return;
-    selectEl.innerHTML = '<option value="latest">Najnowszy stabilny (zalecane)</option>';
+    selectEl.innerHTML = `<option value="latest">${t('fabric_latest_stable')}</option>`;
     try {
       const loaders = await api.getFabricLoaders(mcVersion);
       for (const l of loaders.slice(0, 15)) {
         const opt = document.createElement('option');
         opt.value = l.version;
-        opt.textContent = l.stable ? `${l.version} (Stabilny)` : `${l.version} (Beta)`;
+        opt.textContent = l.stable ? `${l.version} (Stable)` : `${l.version} (Beta)`;
         selectEl.appendChild(opt);
       }
     } catch {
@@ -645,7 +807,7 @@
   async function triggerJavaInstall(major) {
     state.javaDownloadingMajor = Number(major);
     $('java-install-progress').classList.remove('hidden');
-    $('java-progress-label').textContent = `Rozpoczynanie pobierania Java ${major}...`;
+    $('java-progress-label').textContent = `Java ${major}...`;
     $('java-progress-pct').textContent = '0%';
     $('java-progress-bar').style.width = '2%';
     renderJavaAndFabricView();
@@ -653,9 +815,9 @@
     try {
       const res = await api.installJava(Number(major));
       state.javaData = res.detected;
-      showToast(`Zainstalowano Java ${major} (${res.installed.rawVersion})!`, 'success');
+      showToast(`Java ${major} (${res.installed.rawVersion}) ✓`, 'success');
     } catch (err) {
-      showToast(`Błąd pobierania Javy ${major}: ${err.message}`, 'error');
+      showToast(`${t('error_prefix')}: ${err.message}`, 'error');
     } finally {
       state.javaDownloadingMajor = null;
       $('java-install-progress').classList.add('hidden');
@@ -670,11 +832,16 @@
     const mem = state.appState.systemMemory || { totalMb: 8192, maxSafeMb: 6144 };
 
     applyTheme(state.appState.theme);
+    applyLanguageUI(state.appState.language || 'pl');
+
     const slider = $('setting-ram-slider');
     slider.max = String(Math.max(2048, mem.maxSafeMb));
     slider.value = String(s.ramMb);
     $('setting-ram-value').textContent = `${s.ramMb} MB`;
-    $('setting-ram-hint').textContent = `Pamięć w komputerze: ${(mem.totalMb / 1024).toFixed(1)} GB (zalecane maks. ${mem.maxSafeMb} MB)`;
+    $('setting-ram-hint').textContent = t('ram_hint', {
+      gb: (mem.totalMb / 1024).toFixed(1),
+      max: mem.maxSafeMb
+    });
 
     $('setting-custom-res').checked = Boolean(s.customResolution);
     $('setting-width').value = String(s.width || 1280);
@@ -693,12 +860,12 @@
       row.className = 'compact-row';
       row.innerHTML = `
         <div class="compact-row-meta">
-          <strong>${acc.username} ${isActive ? '· (Aktywny)' : ''}</strong>
+          <strong>${acc.username} ${isActive ? '· ✓' : ''}</strong>
           <span>UUID: ${acc.uuid}</span>
         </div>
         <div style="display:flex;gap:6px">
-          ${!isActive ? '<button class="btn-outline" type="button" data-use>Wybierz</button>' : ''}
-          ${state.appState.accounts.length > 1 ? '<button class="btn-danger-sm" type="button" data-del>Usuń</button>' : ''}
+          ${!isActive ? '<button class="btn-outline" type="button" data-use>✓</button>' : ''}
+          ${state.appState.accounts.length > 1 ? `<button class="btn-danger-sm" type="button" data-del>${t('btn_remove')}</button>` : ''}
         </div>
       `;
       const useBtn = row.querySelector('[data-use]');
@@ -746,7 +913,9 @@
 
   async function openProfileModal(existingProfile = null) {
     state.editingProfileId = existingProfile && existingProfile.id ? existingProfile.id : null;
-    $('modal-profile-title').textContent = state.editingProfileId ? 'Edytuj profil' : 'Nowy profil';
+    $('modal-profile-title').textContent = state.editingProfileId
+      ? t('modal_profile_edit')
+      : t('modal_profile_new');
     $('prof-name-input').value = existingProfile?.name || '';
     $('prof-mc-filter').value = '';
     const defaultMc = existingProfile?.mcVersion || state.manifest?.latest?.release || '26.3';
@@ -769,10 +938,10 @@
   async function selectProfile(profileId) {
     const res = await api.selectProfile(profileId);
     state.appState = await api.getState();
-    await refreshActiveProfileMods();
+    await refreshActiveContent();
     renderAll();
-    if (state.activeView === 'mods') {
-      await searchModrinthCatalog();
+    if (state.activeView === 'mods' && state.modsSubView === 'browse') {
+      await searchModrinthCatalog({ append: false });
     }
     return res.profile;
   }
@@ -786,20 +955,32 @@
     const profile = getActiveProfile();
     if (!profile) return;
     updateLaunchButtonUI({ preparing: true });
-    $('dock-progress-label').textContent = 'Przygotowywanie gry...';
+    $('dock-progress-label').textContent = t('preparing_game');
     $('dock-progress-pct').textContent = '5%';
     $('dock-progress-bar').style.width = '5%';
     try {
       const res = await api.launchProfile(profile.id);
       state.appState = res.state;
       updateLaunchButtonUI({ running: true });
-      $('dock-progress-label').textContent = `Minecraft ${profile.mcVersion} uruchomiony`;
+      $('dock-progress-label').textContent = t('mc_running', { ver: profile.mcVersion });
       $('dock-progress-bar').style.width = '100%';
       $('dock-progress-pct').textContent = '100%';
     } catch (err) {
       updateLaunchButtonUI({ running: false });
-      $('dock-progress-label').textContent = `Błąd: ${err.message}`;
+      $('dock-progress-label').textContent = `${t('error_prefix')}: ${err.message}`;
       showToast(err.message, 'error');
+    }
+  }
+
+  async function changeLanguage(lang) {
+    await api.setLanguage(lang);
+    state.appState.language = lang;
+    applyLanguageUI(lang);
+    renderAll();
+    if (state.activeView === 'java') {
+      renderJavaAndFabricView();
+    } else if (state.activeView === 'mods') {
+      renderModrinthGrid();
     }
   }
 
@@ -808,6 +989,9 @@
     renderVersionsTable();
     renderModsHeaderAndInstalled();
     renderSettingsView();
+    if (state.activeView === 'java') {
+      renderJavaAndFabricView();
+    }
   }
 
   function wireEvents() {
@@ -820,6 +1004,9 @@
       state.appState.theme = next;
       applyTheme(next);
     });
+
+    $('topbar-lang-select').addEventListener('change', (e) => changeLanguage(e.target.value));
+    $('setting-lang-select').addEventListener('change', (e) => changeLanguage(e.target.value));
 
     document.querySelectorAll('.top-nav-item').forEach((btn) => {
       btn.addEventListener('click', () => switchView(btn.dataset.view));
@@ -841,7 +1028,7 @@
         state.appState = res.state;
         $('modal-account').classList.add('hidden');
         renderAll();
-        showToast(`Ustawiono nick gracza: ${res.account.username}`, 'success');
+        showToast(res.account.username, 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -854,9 +1041,9 @@
       const active = getActiveProfile();
       if (!active || state.appState.profiles.length <= 1) return;
       state.appState = await api.deleteProfile(active.id);
-      await refreshActiveProfileMods();
+      await refreshActiveContent();
       renderAll();
-      showToast('Usunięto profil.', 'info');
+      showToast(t('toast_deleted_profile'), 'info');
     });
     $('btn-hero-go-mods').addEventListener('click', () => switchView('mods'));
 
@@ -871,17 +1058,17 @@
       if (!profile) return;
       const btn = $('btn-quick-install-fabric');
       btn.disabled = true;
-      btn.textContent = 'Instalowanie...';
+      btn.textContent = t('installing');
       try {
         const res = await api.enableFabricOnProfile(profile.id, profile.fabricVersion || 'latest');
         state.appState = res.state;
         renderAll();
-        showToast(`Zainstalowano Fabric ${res.installed.loaderVersion}!`, 'success');
+        showToast(`Fabric ${res.installed.loaderVersion} ✓`, 'success');
       } catch (err) {
         showToast(err.message, 'error');
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Zainstaluj Fabric';
+        btn.textContent = t('btn_install_fabric');
       }
     });
 
@@ -890,7 +1077,6 @@
     $('btn-refresh-manifest').addEventListener('click', async () => {
       state.manifest = await api.getManifest(true);
       renderVersionsTable();
-      showToast('Odświeżono katalog wersji Mojang.', 'info');
     });
     $('versions-search').addEventListener('input', (e) => {
       state.versionsSearch = e.target.value;
@@ -912,8 +1098,11 @@
       renderVersionsTable();
     });
 
+    // Mods view
     $('mods-profile-select').addEventListener('change', (e) => selectProfile(e.target.value));
-    $('btn-mods-open-folder').addEventListener('click', () => api.openModsFolder(getActiveProfile()?.id));
+    $('btn-mods-open-folder').addEventListener('click', () =>
+      api.openContentFolder(getActiveProfile()?.id, state.contentProjectType)
+    );
     $('btn-switch-profile-fabric').addEventListener('click', async () => {
       const profile = getActiveProfile();
       if (!profile) return;
@@ -921,29 +1110,48 @@
         const res = await api.enableFabricOnProfile(profile.id, 'latest');
         state.appState = res.state;
         renderAll();
-        await searchModrinthCatalog();
-        showToast(`Profil "${profile.name}" przełączony na Fabric!`, 'success');
+        await searchModrinthCatalog({ append: false });
       } catch (err) {
         showToast(err.message, 'error');
       }
     });
 
-    document.querySelectorAll('[data-modtab]').forEach((tab) => {
-      tab.addEventListener('click', () => {
-        const name = tab.dataset.modtab;
-        document.querySelectorAll('[data-modtab]').forEach((t) =>
-          t.classList.toggle('active', t === tab)
-        );
-        $('modtab-browse').classList.toggle('active', name === 'browse');
-        $('modtab-installed').classList.toggle('active', name === 'installed');
-      });
+    $('mods-type-tabs').addEventListener('click', async (e) => {
+      const tab = e.target.closest('.subtab');
+      if (!tab) return;
+      document.querySelectorAll('#mods-type-tabs .subtab').forEach((el) =>
+        el.classList.toggle('active', el === tab)
+      );
+      const viewMode = tab.dataset.contentView || 'browse';
+      state.modsSubView = viewMode;
+      if (tab.dataset.ptype) {
+        state.contentProjectType = tab.dataset.ptype;
+      }
+      $('modtab-browse').classList.toggle('active', viewMode === 'browse');
+      $('modtab-installed').classList.toggle('active', viewMode === 'installed');
+      await refreshActiveContent();
+      renderModsHeaderAndInstalled();
+      if (viewMode === 'browse') {
+        await searchModrinthCatalog({ append: false });
+      }
+    });
+
+    $('curated-packs-bar').addEventListener('click', (e) => {
+      const btn = e.target.closest('.pack-btn');
+      if (btn && btn.dataset.pack) {
+        runCuratedPackInstall(btn.dataset.pack, btn);
+      }
     });
 
     let searchDebounce = null;
     $('modrinth-search-input').addEventListener('input', (e) => {
       state.modrinthQuery = e.target.value;
       clearTimeout(searchDebounce);
-      searchDebounce = setTimeout(searchModrinthCatalog, 280);
+      searchDebounce = setTimeout(() => searchModrinthCatalog({ append: false }), 280);
+    });
+    $('modrinth-sort-select').addEventListener('change', (e) => {
+      state.modrinthSort = e.target.value;
+      searchModrinthCatalog({ append: false });
     });
     $('modrinth-category-pills').addEventListener('click', (e) => {
       const pill = e.target.closest('.filter-pill');
@@ -952,22 +1160,47 @@
         p.classList.toggle('active', p === pill)
       );
       state.modrinthCategory = pill.dataset.cat;
-      searchModrinthCatalog();
+      searchModrinthCatalog({ append: false });
     });
 
-    $('btn-install-fps-pack').addEventListener('click', () =>
-      runFpsPackInstall($('btn-install-fps-pack'))
-    );
+    $('btn-modrinth-more').addEventListener('click', () => {
+      state.modrinthOffset += 24;
+      searchModrinthCatalog({ append: true });
+    });
+
+    $('btn-check-updates').addEventListener('click', async () => {
+      const profile = getActiveProfile();
+      if (!profile) return;
+      const btn = $('btn-check-updates');
+      btn.disabled = true;
+      btn.textContent = t('checking_updates');
+      try {
+        const res = await api.updateAllMods(profile.id);
+        state.mods = res.mods;
+        state.installedContent = res.mods;
+        renderModsHeaderAndInstalled();
+        if (res.updated && res.updated.length > 0) {
+          showToast(t('updates_done', { count: res.updated.length }), 'success');
+        } else {
+          showToast(t('updates_none', { count: res.checked }), 'info');
+        }
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = t('btn_check_updates');
+      }
+    });
 
     $('btn-pick-jar-mods').addEventListener('click', async () => {
       const profile = getActiveProfile();
       if (!profile) return;
-      const res = await api.pickAndImportMods(profile.id);
+      const res = await api.pickAndImportContent(profile.id, state.contentProjectType);
       if (!res.canceled) {
-        state.mods = res.mods;
+        state.installedContent = res.mods;
+        if (state.contentProjectType === 'mod') state.mods = res.mods;
         renderModsHeaderAndInstalled();
         renderPlayView();
-        showToast(`Dodano ${res.imported.length} plików .jar.`, 'success');
       }
     });
 
@@ -987,23 +1220,47 @@
       dz.classList.remove('dragover');
       const files = Array.from(e.dataTransfer?.files || []);
       const paths = files.map((f) => api.getFilePath(f)).filter(Boolean);
-      if (paths.length === 0) {
-        showToast('Upuść pliki .jar bezpośrednio z Eksploratora Windows.', 'error');
-        return;
-      }
+      if (paths.length === 0) return;
       const profile = getActiveProfile();
-      const res = await api.importModPaths(profile.id, paths);
-      state.mods = res.mods;
+      const res = await api.importContentPaths(profile.id, paths, state.contentProjectType);
+      state.installedContent = res.mods;
+      if (state.contentProjectType === 'mod') state.mods = res.mods;
       renderModsHeaderAndInstalled();
       renderPlayView();
-      showToast(`Zaimportowano ${res.imported.length} modów (.jar).`, 'success');
+    });
+
+    // Mod details modal
+    $('modal-details-close').addEventListener('click', () => $('modal-mod-details').classList.add('hidden'));
+    $('mod-details-open-web').addEventListener('click', () => {
+      if (state.activeModDetails?.projectUrl) {
+        api.openExternal(state.activeModDetails.projectUrl);
+      }
+    });
+    $('mod-details-version-select').addEventListener('change', (e) => {
+      const v = state.activeModDetails?.versions?.find((item) => item.id === e.target.value);
+      const depCount = v?.dependencies?.length || 0;
+      $('mod-details-deps').textContent = depCount > 0 ? t('details_deps', { count: depCount }) : '';
+    });
+    $('mod-details-install-btn').addEventListener('click', async () => {
+      const details = state.activeModDetails;
+      const versionId = $('mod-details-version-select').value;
+      if (!details || !versionId) return;
+      const btn = $('mod-details-install-btn');
+      btn.disabled = true;
+      btn.textContent = t('btn_downloading');
+      try {
+        await installHitDirect(details, versionId, null);
+        $('modal-mod-details').classList.add('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = t('details_install_btn');
+      }
     });
 
     $('btn-rescan-java').addEventListener('click', async () => {
       state.javaData = await api.detectJava();
       renderJavaAndFabricView();
       renderPlayView();
-      showToast('Zeskanowano środowiska Java w systemie.', 'info');
     });
     $('fabric-mc-select').addEventListener('change', (e) =>
       loadFabricLoaderOptions(e.target.value, $('fabric-loader-select'))
@@ -1026,15 +1283,14 @@
                 mcVersion: mcVer,
                 profileId: active.id
               });
-              await refreshActiveProfileMods();
+              await refreshActiveContent();
             } catch {
               // Ignore if Fabric API doesn't exist for snapshot
             }
           }
         }
         renderAll();
-        renderJavaAndFabricView();
-        showToast(`Zainstalowano Fabric ${res.installed.loaderVersion} dla MC ${mcVer}!`, 'success');
+        showToast(`Fabric ${res.installed.loaderVersion} (${mcVer}) ✓`, 'success');
       } catch (err) {
         showToast(err.message, 'error');
       } finally {
@@ -1079,7 +1335,7 @@
           jvmArgs: $('setting-jvm-args').value
         });
         renderAll();
-        showToast('Zapisano ustawienia launchera.', 'success');
+        showToast(t('toast_saved_settings'), 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -1091,7 +1347,7 @@
         state.appState = res.state;
         $('new-account-input').value = '';
         renderAll();
-        showToast(`Dodano konto ${res.account.username}.`, 'success');
+        showToast(res.account.username, 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -1103,13 +1359,11 @@
       if (!picked) return;
       state.appState = await api.updateSettings({ dataDir: picked });
       renderAll();
-      showToast('Zmieniono katalog danych Peak Launcher.', 'success');
     });
 
     $('btn-copy-logs').addEventListener('click', () => {
       const text = state.logs.map((l) => `[${l.level}] ${l.text}`).join('\n');
       navigator.clipboard.writeText(text);
-      showToast('Skopiowano logi do schowka.', 'info');
     });
     $('btn-clear-logs').addEventListener('click', () => {
       state.logs = [];
@@ -1159,9 +1413,9 @@
           state.appState = res.state;
         }
         $('modal-profile').classList.add('hidden');
-        await refreshActiveProfileMods();
+        await refreshActiveContent();
         renderAll();
-        showToast('Zapisano profil!', 'success');
+        showToast(t('toast_saved_profile'), 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -1169,7 +1423,7 @@
 
     api.onLauncherProgress((p) => {
       $('launch-progress-box').classList.remove('hidden');
-      $('dock-progress-label').textContent = p.message || 'Przetwarzanie...';
+      $('dock-progress-label').textContent = p.message || '...';
       if (typeof p.percent === 'number') {
         $('dock-progress-bar').style.width = `${p.percent}%`;
         $('dock-progress-pct').textContent = `${p.percent}%`;
@@ -1181,15 +1435,15 @@
     api.onLauncherStatus(async (st) => {
       $('console-status-text').textContent =
         st.state === 'running'
-          ? `Status: gra uruchomiona (PID ${st.pid})`
+          ? t('console_running', { pid: st.pid })
           : st.state === 'preparing'
-            ? 'Status: pobieranie i przygotowanie plików...'
-            : 'Status: gotowy';
+            ? t('console_preparing')
+            : t('console_ready');
       if (st.state === 'idle') {
         updateLaunchButtonUI({ running: false });
         if (st.error) {
           $('launch-progress-box').classList.remove('hidden');
-          $('dock-progress-label').textContent = `Błąd: ${st.error}`;
+          $('dock-progress-label').textContent = `${t('error_prefix')}: ${st.error}`;
         } else {
           $('launch-progress-box').classList.add('hidden');
           $('dock-progress-bar').style.width = '0%';
@@ -1203,14 +1457,14 @@
 
     api.onJavaProgress((p) => {
       $('java-install-progress').classList.remove('hidden');
-      $('java-progress-label').textContent = p.message || 'Pobieranie Javy...';
+      $('java-progress-label').textContent = p.message || '...';
       $('java-progress-pct').textContent = `${p.percent || 0}%`;
       $('java-progress-bar').style.width = `${p.percent || 0}%`;
     });
 
     api.onFabricProgress((p) => {
       $('fabric-progress-box').classList.remove('hidden');
-      $('fabric-progress-label').textContent = p.message || 'Instalowanie Fabric...';
+      $('fabric-progress-label').textContent = p.message || '...';
       $('fabric-progress-pct').textContent = `${p.percent || 0}%`;
       $('fabric-progress-bar').style.width = `${p.percent || 0}%`;
     });
@@ -1228,11 +1482,12 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Uruchomiono Peak Launcher v1.2.0 (Peak Cinema GUI).', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.3.0 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);
-    await refreshActiveProfileMods();
+    applyLanguageUI(state.appState.language || 'pl');
+    await refreshActiveContent();
     renderAll();
 
     const [manifestRes, fabricRes, javaRes, adoptiumRes] = await Promise.allSettled([
@@ -1242,16 +1497,12 @@
       api.getAdoptiumInfo()
     ]);
 
-    if (manifestRes.status === 'fulfilled') {
-      state.manifest = manifestRes.value;
-    }
+    if (manifestRes.status === 'fulfilled') state.manifest = manifestRes.value;
     if (fabricRes.status === 'fulfilled' && Array.isArray(fabricRes.value)) {
       state.fabricVersionsList = fabricRes.value;
       state.fabricVersionsSet = new Set(fabricRes.value.map((f) => f.version));
     }
-    if (javaRes.status === 'fulfilled') {
-      state.javaData = javaRes.value;
-    }
+    if (javaRes.status === 'fulfilled') state.javaData = javaRes.value;
     if (adoptiumRes.status === 'fulfilled' && Array.isArray(adoptiumRes.value)) {
       for (const item of adoptiumRes.value) {
         if (item && item.major) state.adoptiumInfo[item.major] = item;
@@ -1259,14 +1510,13 @@
     }
 
     renderAll();
-    if (state.activeView === 'java') {
-      renderJavaAndFabricView();
-    }
-
     window.__peakReady = true;
   }
 
-  window.__peakTestNavigate = async (view, theme) => {
+  window.__peakTestNavigate = async (view, theme, lang) => {
+    if (lang) {
+      await changeLanguage(lang);
+    }
     if (theme) {
       await api.setTheme(theme);
       state.appState.theme = theme;
@@ -1276,8 +1526,8 @@
   };
 
   init().catch((err) => {
-    appendLog({ level: 'ERROR', text: `Błąd inicjalizacji: ${err.message}`, ts: new Date().toISOString() });
-    showToast(`Błąd inicjalizacji: ${err.message}`, 'error');
+    appendLog({ level: 'ERROR', text: err.message, ts: new Date().toISOString() });
+    showToast(err.message, 'error');
     window.__peakReady = true;
   });
 })();

@@ -113,6 +113,29 @@ h1, h2, h3 { font-family: var(--font-display); }
 
 .header-actions { display: flex; align-items: center; gap: 10px; }
 
+.site-lang-pill {
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.14s ease, color 0.14s ease;
+}
+.site-lang-pill:hover,
+.site-lang-pill:focus-visible {
+  border-color: var(--border-strong);
+}
+.site-lang-pill option {
+  background: var(--surface-solid);
+  color: var(--text);
+}
+
 .icon-toggle {
   width: 32px;
   height: 32px;

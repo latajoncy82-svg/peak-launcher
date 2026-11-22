@@ -35,9 +35,10 @@ contextBridge.exposeInMainWorld('peakAPI', {
     }
   },
 
-  // State, Theme, Settings, Accounts
+  // State, Theme, Language, Settings, Accounts
   getState: () => invoke('state:get'),
   setTheme: (theme) => invoke('theme:set', theme),
+  setLanguage: (lang) => invoke('language:set', lang),
   updateSettings: (patch) => invoke('settings:update', patch),
   saveAccount: (payload) => invoke('account:save', payload),
   selectAccount: (accountId) => invoke('account:select', accountId),
@@ -70,16 +71,31 @@ contextBridge.exposeInMainWorld('peakAPI', {
   listInstalledFabric: () => invoke('fabric:listInstalled'),
   onFabricProgress: (cb) => subscribe('fabric:progress', cb),
 
-  // Mods
+  // Mods & Content (Mods / Shaders / Resource Packs)
   listMods: (profileId) => invoke('mods:list', profileId),
+  listContent: (profileId, projectType) => invoke('mods:listContent', profileId, projectType),
   toggleMod: (profileId, fileName, enabled) => invoke('mods:toggle', profileId, fileName, enabled),
+  toggleContent: (profileId, fileName, enabled, projectType) =>
+    invoke('mods:toggleContent', profileId, fileName, enabled, projectType),
   deleteMod: (profileId, fileName) => invoke('mods:delete', profileId, fileName),
+  deleteContent: (profileId, fileName, projectType) =>
+    invoke('mods:deleteContent', profileId, fileName, projectType),
   pickAndImportMods: (profileId) => invoke('mods:pickAndImport', profileId),
+  pickAndImportContent: (profileId, projectType) =>
+    invoke('mods:pickAndImportContent', profileId, projectType),
   importModPaths: (profileId, paths) => invoke('mods:importPaths', profileId, paths),
+  importContentPaths: (profileId, paths, projectType) =>
+    invoke('mods:importContentPaths', profileId, paths, projectType),
   searchModrinth: (params) => invoke('mods:search', params),
+  getModDetails: (params) => invoke('mods:details', params),
   installModrinthMod: (params) => invoke('mods:installModrinth', params),
   installPeakFpsPack: (profileId) => invoke('mods:installPeakFpsPack', profileId),
+  installPack: (profileId, packId) => invoke('mods:installPack', profileId, packId),
+  checkModUpdates: (profileId) => invoke('mods:checkUpdates', profileId),
+  updateAllMods: (profileId) => invoke('mods:updateAll', profileId),
   openModsFolder: (profileId) => invoke('mods:openFolder', profileId),
+  openContentFolder: (profileId, projectType) =>
+    invoke('mods:openContentFolder', profileId, projectType),
   onModsProgress: (cb) => subscribe('mods:progress', cb),
 
   // Launch

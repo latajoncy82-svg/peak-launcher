@@ -283,6 +283,25 @@ body.overlay-open .cinema-photo {
   border-color: var(--border-strong);
 }
 
+.lang-pill {
+  height: 30px;
+  padding: 0 9px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-pill);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+}
+
+.lang-pill option {
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
 .player-avatar-mini {
   width: 22px;
   height: 22px;
@@ -850,27 +869,104 @@ select:focus, input:focus {
   display: flex;
 }
 
-.fps-compact-bar {
+.mods-meta-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.packs-strip {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 13px 18px;
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(37, 99, 235, 0.14));
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(37, 99, 235, 0.12));
+  border: 1px solid rgba(16, 185, 129, 0.28);
   backdrop-filter: blur(16px);
 }
 
-.fps-compact-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.packs-strip-label {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: var(--text);
 }
 
-.fps-compact-text span {
+.packs-strip-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pack-btn {
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-pill);
+  color: var(--text);
+  font-family: inherit;
   font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.14s ease;
+}
+
+.pack-btn:hover:not(:disabled) {
+  border-color: var(--emerald);
+  background: var(--emerald-soft);
+}
+
+.pack-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.sort-select {
+  min-width: 170px;
+}
+
+.dropzone-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.mod-card.clickable {
+  cursor: pointer;
+}
+
+.modal-card.modal-lg {
+  max-width: 600px;
+}
+
+.mod-details-head-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.mod-details-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+}
+
+.mod-details-desc {
+  font-size: 13.5px;
+  line-height: 1.55;
   color: var(--text-muted);
+}
+
+.mod-details-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .toolbar-row {

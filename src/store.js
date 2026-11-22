@@ -26,6 +26,8 @@ function getSystemMemoryInfo() {
   return { totalMb, freeMb, maxSafeMb, recommendedMb };
 }
 
+const SUPPORTED_LANGUAGES = ['pl', 'en', 'de', 'es', 'fr', 'uk'];
+
 function createDefaultConfig() {
   const { recommendedMb } = getSystemMemoryInfo();
   const defaultAccountId = 'acc-peak-player';
@@ -34,6 +36,7 @@ function createDefaultConfig() {
   return {
     version: 1,
     theme: 'alpine-dark',
+    language: 'pl',
     dataDir: getDefaultDataDir(),
     activeAccountId: defaultAccountId,
     accounts: [
@@ -157,6 +160,13 @@ class Store {
     this.data.theme = theme === 'alpine-light' ? 'alpine-light' : 'alpine-dark';
     this.save();
     return this.data.theme;
+  }
+
+  setLanguage(lang) {
+    const clean = SUPPORTED_LANGUAGES.includes(lang) ? lang : 'pl';
+    this.data.language = clean;
+    this.save();
+    return clean;
   }
 
   updateSettings(patch) {
@@ -348,6 +358,7 @@ class Store {
 
 module.exports = {
   Store,
+  SUPPORTED_LANGUAGES,
   computeOfflineUuid,
   getSystemMemoryInfo,
   createDefaultConfig

@@ -11,13 +11,62 @@ const PEAK_FPS_PACK_IDS = [
   { id: 'AANobbMI', label: 'Sodium' },
   { id: 'gvQqBUqZ', label: 'Lithium' },
   { id: 'uXXizFIs', label: 'FerriteCore' },
+  { id: 'NNAgCjsB', label: 'Entity Culling' },
+  { id: '5ZwdcRci', label: 'ImmediatelyFast' },
   { id: 'mOgUt4GM', label: 'Mod Menu' }
 ];
 
+const PEAK_PACKS = {
+  fps: {
+    id: 'fps',
+    title: 'Peak FPS Boost',
+    items: PEAK_FPS_PACK_IDS
+  },
+  shaders: {
+    id: 'shaders',
+    title: 'Peak Shadery (Iris)',
+    items: [
+      { id: 'P7dR8mSH', label: 'Fabric API' },
+      { id: 'AANobbMI', label: 'Sodium' },
+      { id: 'YL57xq9U', label: 'Iris Shaders' },
+      { id: 'mOgUt4GM', label: 'Mod Menu' }
+    ]
+  },
+  qol: {
+    id: 'qol',
+    title: 'Peak Survival+ QoL',
+    items: [
+      { id: 'P7dR8mSH', label: 'Fabric API' },
+      { id: 'mOgUt4GM', label: 'Mod Menu' },
+      { id: 'EsAfCjCV', label: 'AppleSkin' },
+      { id: 'nvQzSEkH', label: 'Jade' },
+      { id: 'aC3cM3Vq', label: 'Mouse Tweaks' },
+      { id: 'w7ThoJFB', label: 'Zoomify' },
+      { id: '1bokaNcj', label: "Xaero's Minimap" }
+    ]
+  }
+};
+
+function normalizeProjectType(projectType) {
+  if (projectType === 'shader' || projectType === 'resourcepack') return projectType;
+  return 'mod';
+}
+
+function getContentDir(dataDir, profileId, projectType = 'mod') {
+  const dirs = getProfileDirs(dataDir, profileId);
+  const type = normalizeProjectType(projectType);
+  const target =
+    type === 'shader'
+      ? dirs.shaderpacksDir
+      : type === 'resourcepack'
+        ? dirs.resourcepacksDir
+        : dirs.modsDir;
+  ensureDir(target);
+  return target;
+}
+
 function getProfileModsDir(dataDir, profileId) {
-  const { modsDir } = getProfileDirs(dataDir, profileId);
-  ensureDir(modsDir);
-  return modsDir;
+  return getContentDir(dataDir, profileId, 'mod');
 }
 
 function getMetadataFilePath(dataDir, profileId) {
@@ -40,7 +89,16 @@ function readModsMetadata(dataDir, profileId) {
 
 function writeModsMetadata(dataDir, profileId, metadata) {
   const metaPath = getMetadataFilePath(dataDir, profileId);
-  fs.writeFileSync(metaPath, JSON.stringify(metadata, null, 2), 'utf8');
+  const tmpPath = `${metaPath}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(metadata, null, 2), 'utf8');
+  fs.renameSync(tmpPath, metaPath);
+}
+
+function updateModsMetadata(dataDir, profileId, mutator) {
+  const current = readModsMetadata(dataDir, profileId);
+  const next = mutator(current) || current;
+  writeModsMetadata(dataDir, profileId, next);
+  return next;
 }
 
 function normalizeJarKey(fileName) {
@@ -52,7 +110,6 @@ function safeParseJsonLenient(rawText) {
     return JSON.parse(rawText);
   } catch {
     try {
-      // Some older fabric.mod.json files contain trailing newlines in description strings
       const sanitized = rawText.replace(/[\r\n]+/g, ' ');
       return JSON.parse(sanitized);
     } catch {
@@ -62,7 +119,7 @@ function safeParseJsonLenient(rawText) {
 }
 
 function readModMetadataFromJar(jarPath) {
-  const fallbackName = path.basename(jarPath).replace(/(\.jar)(\.disabled)?$/i, '');
+  const fallbackName = path.basename(jarPath).replace(/(\.(jar|zip))(\.disabled)?$/i, '');
   const info = {
     modId: '',
     name: fallbackName,
@@ -70,6 +127,10 @@ function readModMetadataFromJar(jarPath) {
     description: '',
     authors: []
   };
+
+  if (!/\.jar(\.disabled)?$/i.test(jarPath)) {
+    return info;
+  }
 
   try {
     const zip = new AdmZip(jarPath);
@@ -109,35 +170,50 @@ function readModMetadataFromJar(jarPath) {
   return info;
 }
 
-function listProfileMods(dataDir, profileId) {
-  const modsDir = getProfileModsDir(dataDir, profileId);
+function isSupportedContentFile(fileName, projectType) {
+  const lower = String(fileName || '').toLowerCase();
+  if (projectType === 'mod') {
+    return lower.endsWith('.jar') || lower.endsWith('.jar.disabled');
+  }
+  return (
+    lower.endsWith('.zip') ||
+    lower.endsWith('.zip.disabled') ||
+    lower.endsWith('.jar') ||
+    lower.endsWith('.jar.disabled')
+  );
+}
+
+function listProfileContent(dataDir, profileId, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  const contentDir = getContentDir(dataDir, profileId, type);
   const sidecar = readModsMetadata(dataDir, profileId);
-  const entries = fs.readdirSync(modsDir, { withFileTypes: true });
-  const mods = [];
+  const entries = fs.readdirSync(contentDir, { withFileTypes: true });
+  const items = [];
 
   for (const entry of entries) {
     if (!entry.isFile()) continue;
-    const lower = entry.name.toLowerCase();
-    const isEnabled = lower.endsWith('.jar');
-    const isDisabled = lower.endsWith('.jar.disabled');
-    if (!isEnabled && !isDisabled) continue;
+    if (!isSupportedContentFile(entry.name, type)) continue;
 
-    const fullPath = path.join(modsDir, entry.name);
+    const lower = entry.name.toLowerCase();
+    const isEnabled = !lower.endsWith('.disabled');
+    const fullPath = path.join(contentDir, entry.name);
     const stat = fs.statSync(fullPath);
     const jarInfo = readModMetadataFromJar(fullPath);
     const key = normalizeJarKey(entry.name);
     const modrinthInfo = sidecar[key] || null;
 
-    mods.push({
+    items.push({
       fileName: entry.name,
       baseFileName: key,
       filePath: fullPath,
       enabled: isEnabled,
+      projectType: type,
       size: stat.size,
       modifiedAt: stat.mtime.toISOString(),
       modId: jarInfo.modId,
       name: modrinthInfo?.title || jarInfo.name,
       version: jarInfo.version || modrinthInfo?.versionNumber || '',
+      versionId: modrinthInfo?.versionId || null,
       description: jarInfo.description || modrinthInfo?.description || '',
       authors: jarInfo.authors,
       projectId: modrinthInfo?.projectId || null,
@@ -145,25 +221,30 @@ function listProfileMods(dataDir, profileId) {
     });
   }
 
-  mods.sort((a, b) => a.name.localeCompare(b.name, 'pl'));
-  return mods;
+  items.sort((a, b) => a.name.localeCompare(b.name));
+  return items;
 }
 
-function toggleMod(dataDir, profileId, fileName, enabled) {
-  const modsDir = getProfileModsDir(dataDir, profileId);
+function listProfileMods(dataDir, profileId) {
+  return listProfileContent(dataDir, profileId, 'mod');
+}
+
+function toggleContent(dataDir, profileId, fileName, enabled, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  const contentDir = getContentDir(dataDir, profileId, type);
   const safeName = path.basename(fileName);
-  const currentPath = path.join(modsDir, safeName);
+  const currentPath = path.join(contentDir, safeName);
   if (!fs.existsSync(currentPath)) {
-    throw new Error(`Nie znaleziono pliku moda: ${safeName}`);
+    throw new Error(`Nie znaleziono pliku: ${safeName}`);
   }
 
   const baseName = normalizeJarKey(safeName);
-  if (!baseName.toLowerCase().endsWith('.jar')) {
-    throw new Error('Nieprawidłowy plik moda.');
+  if (!isSupportedContentFile(baseName, type)) {
+    throw new Error('Nieprawidłowy plik.');
   }
 
   const targetName = enabled ? baseName : `${baseName}.disabled`;
-  const targetPath = path.join(modsDir, targetName);
+  const targetPath = path.join(contentDir, targetName);
   if (currentPath !== targetPath) {
     if (fs.existsSync(targetPath)) {
       fs.unlinkSync(targetPath);
@@ -171,27 +252,36 @@ function toggleMod(dataDir, profileId, fileName, enabled) {
     fs.renameSync(currentPath, targetPath);
   }
 
-  return listProfileMods(dataDir, profileId);
+  return listProfileContent(dataDir, profileId, type);
 }
 
-function deleteMod(dataDir, profileId, fileName) {
-  const modsDir = getProfileModsDir(dataDir, profileId);
+function toggleMod(dataDir, profileId, fileName, enabled) {
+  return toggleContent(dataDir, profileId, fileName, enabled, 'mod');
+}
+
+function deleteContent(dataDir, profileId, fileName, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  const contentDir = getContentDir(dataDir, profileId, type);
   const safeName = path.basename(fileName);
-  const targetPath = path.join(modsDir, safeName);
+  const targetPath = path.join(contentDir, safeName);
   if (fs.existsSync(targetPath)) {
     fs.unlinkSync(targetPath);
   }
-  const sidecar = readModsMetadata(dataDir, profileId);
   const key = normalizeJarKey(safeName);
-  if (sidecar[key]) {
-    delete sidecar[key];
-    writeModsMetadata(dataDir, profileId, sidecar);
-  }
-  return listProfileMods(dataDir, profileId);
+  updateModsMetadata(dataDir, profileId, (sidecar) => {
+    if (sidecar[key]) delete sidecar[key];
+    return sidecar;
+  });
+  return listProfileContent(dataDir, profileId, type);
 }
 
-function importLocalMods(dataDir, profileId, filePaths) {
-  const modsDir = getProfileModsDir(dataDir, profileId);
+function deleteMod(dataDir, profileId, fileName) {
+  return deleteContent(dataDir, profileId, fileName, 'mod');
+}
+
+function importLocalContent(dataDir, profileId, filePaths, projectType = 'mod') {
+  const type = normalizeProjectType(projectType);
+  const contentDir = getContentDir(dataDir, profileId, type);
   const imported = [];
 
   for (const srcPath of filePaths || []) {
@@ -199,10 +289,8 @@ function importLocalMods(dataDir, profileId, filePaths) {
     const resolved = path.resolve(srcPath);
     if (!fs.existsSync(resolved)) continue;
     const base = path.basename(resolved);
-    if (!base.toLowerCase().endsWith('.jar') && !base.toLowerCase().endsWith('.jar.disabled')) {
-      continue;
-    }
-    const destPath = path.join(modsDir, base);
+    if (!isSupportedContentFile(base, type)) continue;
+    const destPath = path.join(contentDir, base);
     if (resolved !== destPath) {
       fs.copyFileSync(resolved, destPath);
     }
@@ -211,7 +299,48 @@ function importLocalMods(dataDir, profileId, filePaths) {
 
   return {
     imported,
-    mods: listProfileMods(dataDir, profileId)
+    mods: listProfileContent(dataDir, profileId, type)
+  };
+}
+
+function importLocalMods(dataDir, profileId, filePaths) {
+  return importLocalContent(dataDir, profileId, filePaths, 'mod');
+}
+
+function normalizeSortIndex(sort, query) {
+  const valid = new Set(['downloads', 'relevance', 'updated', 'newest', 'follows']);
+  if (sort && sort !== 'auto' && valid.has(sort)) return sort;
+  return query && String(query).trim() ? 'relevance' : 'downloads';
+}
+
+function buildSearchFacets({ projectType, mcVersion, category, includeVersion }) {
+  const type = normalizeProjectType(projectType);
+  const facets = [[`project_type:${type}`]];
+  if (type === 'mod') {
+    facets.push(['categories:fabric']);
+  }
+  if (includeVersion && mcVersion) {
+    facets.push([`versions:${mcVersion}`]);
+  }
+  if (category && category !== 'all') {
+    facets.push([`categories:${category}`]);
+  }
+  return facets;
+}
+
+function mapSearchHit(hit, projectType) {
+  return {
+    projectId: hit.project_id,
+    slug: hit.slug,
+    projectType: normalizeProjectType(projectType),
+    title: hit.title,
+    description: hit.description,
+    author: hit.author,
+    iconUrl: hit.icon_url || '',
+    downloads: hit.downloads || 0,
+    follows: hit.follows || 0,
+    categories: hit.categories || [],
+    versions: hit.versions || []
   };
 }
 
@@ -219,49 +348,160 @@ async function searchModrinth({
   query = '',
   mcVersion = '',
   category = '',
+  projectType = 'mod',
   offset = 0,
-  limit = 20,
-  sort = 'downloads'
+  limit = 24,
+  sort = 'auto'
 } = {}) {
-  const facets = [['project_type:mod'], ['categories:fabric']];
-  if (mcVersion) {
-    facets.push([`versions:${mcVersion}`]);
-  }
-  if (category && category !== 'all') {
-    facets.push([`categories:${category}`]);
+  const type = normalizeProjectType(projectType);
+  const index = normalizeSortIndex(sort, query);
+  const includeVersion = type !== 'shader';
+
+  const runQuery = async (withVersion) => {
+    const facets = buildSearchFacets({
+      projectType: type,
+      mcVersion,
+      category,
+      includeVersion: withVersion
+    });
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset),
+      index,
+      facets: JSON.stringify(facets)
+    });
+    if (query && query.trim()) {
+      params.set('query', query.trim());
+    }
+    return fetchJson(`${MODRINTH_API_BASE}/search?${params.toString()}`);
+  };
+
+  let data = await runQuery(includeVersion);
+  let fallbackAllVersions = false;
+
+  if (type === 'resourcepack' && includeVersion && (!data.hits || data.hits.length === 0)) {
+    data = await runQuery(false);
+    fallbackAllVersions = true;
   }
 
-  const params = new URLSearchParams({
-    limit: String(limit),
-    offset: String(offset),
-    index: sort || 'downloads',
-    facets: JSON.stringify(facets)
-  });
-  if (query && query.trim()) {
-    params.set('query', query.trim());
-  }
-
-  const data = await fetchJson(`${MODRINTH_API_BASE}/search?${params.toString()}`);
-  const hits = (data.hits || []).map((hit) => ({
-    projectId: hit.project_id,
-    slug: hit.slug,
-    title: hit.title,
-    description: hit.description,
-    author: hit.author,
-    iconUrl: hit.icon_url || '',
-    downloads: hit.downloads || 0,
-    categories: hit.categories || [],
-    versions: hit.versions || []
-  }));
+  const hits = (data.hits || []).map((h) => mapSearchHit(h, type));
+  const totalHits = typeof data.total_hits === 'number' ? data.total_hits : hits.length;
 
   return {
     hits,
-    totalHits: data.total_hits || hits.length
+    totalHits,
+    offset,
+    limit,
+    hasMore: offset + hits.length < totalHits,
+    fallbackAllVersions
   };
 }
 
-async function installModrinthMod({
+async function fetchCompatibleVersions({ projectId, mcVersion, projectType = 'mod' }) {
+  const type = normalizeProjectType(projectType);
+  if (type === 'mod') {
+    const loadersParam = encodeURIComponent(JSON.stringify(['fabric']));
+    const gvQuery = mcVersion
+      ? `&game_versions=${encodeURIComponent(JSON.stringify([mcVersion]))}`
+      : '';
+    return fetchJson(
+      `${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}/version?loaders=${loadersParam}${gvQuery}`
+    );
+  }
+
+  if (type === 'resourcepack' && mcVersion) {
+    const filtered = await fetchJson(
+      `${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}/version?game_versions=${encodeURIComponent(JSON.stringify([mcVersion]))}`
+    );
+    if (Array.isArray(filtered) && filtered.length > 0) return filtered;
+  }
+
+  return fetchJson(`${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}/version`);
+}
+
+async function getModrinthProjectDetails(projectId, mcVersion = '', projectType = 'mod') {
+  if (!projectId) throw new Error('Brak identyfikatora projektu Modrinth.');
+  const type = normalizeProjectType(projectType);
+
+  const [project, versions] = await Promise.all([
+    fetchJson(`${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}`),
+    fetchCompatibleVersions({ projectId, mcVersion, projectType: type }).catch(() => [])
+  ]);
+
+  let authorName = '';
+  try {
+    if (project.team) {
+      const members = await fetchJson(
+        `${MODRINTH_API_BASE}/team/${encodeURIComponent(project.team)}/members`
+      );
+      if (Array.isArray(members) && members.length > 0) {
+        const owner = members.find((m) => /owner/i.test(m.role || '')) || members[0];
+        authorName = owner?.user?.username || '';
+      }
+    }
+  } catch {
+    // Non-fatal team lookup
+  }
+
+  const mappedVersions = (Array.isArray(versions) ? versions : []).slice(0, 40).map((v) => ({
+    id: v.id,
+    name: v.name || v.version_number,
+    versionNumber: v.version_number || '',
+    versionType: v.version_type || 'release',
+    datePublished: v.date_published || '',
+    downloads: v.downloads || 0,
+    gameVersions: v.game_versions || [],
+    loaders: v.loaders || [],
+    dependencies: (v.dependencies || []).filter((d) => d.dependency_type === 'required')
+  }));
+
+  return {
+    projectId: project.id,
+    slug: project.slug,
+    projectType: type,
+    title: project.title,
+    description: project.description || '',
+    body: project.body || '',
+    author: authorName,
+    iconUrl: project.icon_url || '',
+    downloads: project.downloads || 0,
+    followers: project.followers || 0,
+    clientSide: project.client_side || '',
+    serverSide: project.server_side || '',
+    license: project.license?.id || project.license?.name || '',
+    sourceUrl: project.source_url || '',
+    projectUrl: `https://modrinth.com/${type}/${project.slug || project.id}`,
+    categories: project.categories || [],
+    versions: mappedVersions
+  };
+}
+
+function removeDuplicateInstalledItems({ dataDir, profileId, projectType, projectId, newFileName, newModId }) {
+  const existing = listProfileContent(dataDir, profileId, projectType);
+  const newKey = normalizeJarKey(newFileName);
+
+  for (const item of existing) {
+    if (item.baseFileName === newKey) continue;
+    const sameProject = Boolean(projectId && item.projectId === projectId);
+    const sameModId = Boolean(newModId && item.modId && item.modId === newModId);
+    if (sameProject || sameModId) {
+      try {
+        if (fs.existsSync(item.filePath)) fs.unlinkSync(item.filePath);
+      } catch {
+        // Ignore deletion failure
+      }
+      updateModsMetadata(dataDir, profileId, (sidecar) => {
+        if (sidecar[item.baseFileName]) delete sidecar[item.baseFileName];
+        return sidecar;
+      });
+    }
+  }
+}
+
+async function installModrinthContent({
   projectId,
+  versionId = null,
+  projectType = 'mod',
   mcVersion,
   dataDir,
   profileId,
@@ -275,14 +515,8 @@ async function installModrinthMod({
   }
   visited.add(projectId);
 
-  const modsDir = getProfileModsDir(dataDir, profileId);
-  const sidecar = readModsMetadata(dataDir, profileId);
-
-  // Skip if already installed for this project
-  const existingMods = listProfileMods(dataDir, profileId);
-  if (existingMods.some((m) => m.projectId === projectId)) {
-    return { installed: [], dependenciesInstalled: [], alreadyInstalled: true };
-  }
+  const type = normalizeProjectType(projectType);
+  const contentDir = getContentDir(dataDir, profileId, type);
 
   let meta = projectMeta;
   if (!meta) {
@@ -300,36 +534,42 @@ async function installModrinthMod({
     }
   }
 
-  if (onProgress) {
-    onProgress({
-      stage: 'mods',
-      projectId,
-      message: `Szukanie wersji moda ${meta.title || projectId} dla MC ${mcVersion}...`
-    });
+  let chosenVersion = null;
+  if (versionId) {
+    chosenVersion = await fetchJson(`${MODRINTH_API_BASE}/version/${encodeURIComponent(versionId)}`);
+  } else {
+    const existingItems = listProfileContent(dataDir, profileId, type);
+    if (existingItems.some((m) => m.projectId === projectId)) {
+      return { installed: [], dependenciesInstalled: [], alreadyInstalled: true };
+    }
+
+    if (onProgress) {
+      onProgress({
+        stage: 'mods',
+        projectId,
+        message: `Szukanie ${meta.title || projectId} dla MC ${mcVersion}...`
+      });
+    }
+
+    const versions = await fetchCompatibleVersions({ projectId, mcVersion, projectType: type });
+    if (!Array.isArray(versions) || versions.length === 0) {
+      throw new Error(
+        `"${meta.title || projectId}" nie ma jeszcze wydania dla ${mcVersion}.`
+      );
+    }
+    chosenVersion = versions.find((v) => v.version_type === 'release') || versions[0];
   }
 
-  const loadersParam = encodeURIComponent(JSON.stringify(['fabric']));
-  const gameVersionsParam = encodeURIComponent(JSON.stringify([mcVersion]));
-  const versions = await fetchJson(
-    `${MODRINTH_API_BASE}/project/${encodeURIComponent(projectId)}/version?loaders=${loadersParam}&game_versions=${gameVersionsParam}`
-  );
-
-  if (!Array.isArray(versions) || versions.length === 0) {
-    throw new Error(
-      `Mod "${meta.title || projectId}" nie ma jeszcze wydania dla Fabric ${mcVersion}.`
-    );
-  }
-
-  const chosenVersion =
-    versions.find((v) => v.version_type === 'release') || versions[0];
   const files = Array.isArray(chosenVersion.files) ? chosenVersion.files : [];
   const primaryFile = files.find((f) => f.primary) || files[0];
   if (!primaryFile || !primaryFile.url) {
-    throw new Error(`Brak pliku JAR dla moda ${meta.title || projectId}.`);
+    throw new Error(`Brak pliku do pobrania dla ${meta.title || projectId}.`);
   }
 
-  const safeFilename = path.basename(primaryFile.filename || `${projectId}.jar`);
-  const destPath = path.join(modsDir, safeFilename);
+  const safeFilename = path.basename(
+    primaryFile.filename || `${projectId}.${type === 'mod' ? 'jar' : 'zip'}`
+  );
+  const destPath = path.join(contentDir, safeFilename);
   const hashAlgo = primaryFile.hashes?.sha512 ? 'sha512' : primaryFile.hashes?.sha1 ? 'sha1' : 'sha1';
   const expectedHash = primaryFile.hashes?.[hashAlgo] || null;
 
@@ -349,65 +589,96 @@ async function installModrinthMod({
     }
   });
 
-  sidecar[normalizeJarKey(safeFilename)] = {
+  const downloadedInfo = readModMetadataFromJar(destPath);
+  removeDuplicateInstalledItems({
+    dataDir,
+    profileId,
+    projectType: type,
     projectId,
-    slug: meta.slug || '',
-    title: meta.title || safeFilename,
-    description: meta.description || '',
-    iconUrl: meta.iconUrl || '',
-    versionId: chosenVersion.id,
-    versionNumber: chosenVersion.version_number || ''
-  };
-  writeModsMetadata(dataDir, profileId, sidecar);
+    newFileName: safeFilename,
+    newModId: downloadedInfo.modId
+  });
+
+  updateModsMetadata(dataDir, profileId, (sidecar) => {
+    sidecar[normalizeJarKey(safeFilename)] = {
+      projectId,
+      projectType: type,
+      slug: meta.slug || '',
+      title: meta.title || downloadedInfo.name || safeFilename,
+      description: meta.description || downloadedInfo.description || '',
+      iconUrl: meta.iconUrl || '',
+      versionId: chosenVersion.id,
+      versionNumber: chosenVersion.version_number || ''
+    };
+    return sidecar;
+  });
 
   const installed = [{ projectId, title: meta.title || safeFilename, fileName: safeFilename }];
   const dependenciesInstalled = [];
 
-  const deps = Array.isArray(chosenVersion.dependencies) ? chosenVersion.dependencies : [];
-  for (const dep of deps) {
-    if (dep.dependency_type !== 'required' || !dep.project_id) continue;
-    if (visited.has(dep.project_id)) continue;
+  if (type === 'mod') {
+    const deps = Array.isArray(chosenVersion.dependencies) ? chosenVersion.dependencies : [];
+    for (const dep of deps) {
+      if (dep.dependency_type !== 'required') continue;
+      let depProjectId = dep.project_id || null;
+      if (!depProjectId && dep.version_id) {
+        try {
+          const depVer = await fetchJson(
+            `${MODRINTH_API_BASE}/version/${encodeURIComponent(dep.version_id)}`
+          );
+          depProjectId = depVer?.project_id || null;
+        } catch {
+          depProjectId = null;
+        }
+      }
+      if (!depProjectId || visited.has(depProjectId)) continue;
 
-    try {
-      const subRes = await installModrinthMod({
-        projectId: dep.project_id,
-        mcVersion,
-        dataDir,
-        profileId,
-        onProgress,
-        visited
-      });
-      if (subRes.installed && subRes.installed.length > 0) {
-        dependenciesInstalled.push(...subRes.installed);
+      try {
+        const subRes = await installModrinthContent({
+          projectId: depProjectId,
+          projectType: 'mod',
+          mcVersion,
+          dataDir,
+          profileId,
+          onProgress,
+          visited
+        });
+        if (subRes.installed?.length) dependenciesInstalled.push(...subRes.installed);
+        if (subRes.dependenciesInstalled?.length) {
+          dependenciesInstalled.push(...subRes.dependenciesInstalled);
+        }
+      } catch {
+        // Continue even if an optional/nested dependency fails lookup
       }
-      if (subRes.dependenciesInstalled && subRes.dependenciesInstalled.length > 0) {
-        dependenciesInstalled.push(...subRes.dependenciesInstalled);
-      }
-    } catch {
-      // Continue even if an optional/nested dependency fails lookup
     }
   }
 
   return { installed, dependenciesInstalled };
 }
 
-async function installPeakFpsPack({ mcVersion, dataDir, profileId, onProgress = null }) {
+async function installModrinthMod(params) {
+  return installModrinthContent({ ...params, projectType: 'mod' });
+}
+
+async function installCuratedPack({ packId = 'fps', mcVersion, dataDir, profileId, onProgress = null }) {
+  const pack = PEAK_PACKS[packId] || PEAK_PACKS.fps;
   const visited = new Set();
   const installed = [];
   const skipped = [];
 
-  for (let i = 0; i < PEAK_FPS_PACK_IDS.length; i++) {
-    const item = PEAK_FPS_PACK_IDS[i];
+  for (let i = 0; i < pack.items.length; i++) {
+    const item = pack.items[i];
     if (onProgress) {
       onProgress({
         stage: 'mods',
-        percent: Math.round((i / PEAK_FPS_PACK_IDS.length) * 100),
-        message: `Instalowanie pakietu Peak FPS (${i + 1}/${PEAK_FPS_PACK_IDS.length}): ${item.label}...`
+        percent: Math.round((i / pack.items.length) * 100),
+        message: `${pack.title} (${i + 1}/${pack.items.length}): ${item.label}...`
       });
     }
     try {
-      const res = await installModrinthMod({
+      const res = await installModrinthContent({
         projectId: item.id,
+        projectType: 'mod',
         mcVersion,
         dataDir,
         profileId,
@@ -422,8 +693,90 @@ async function installPeakFpsPack({ mcVersion, dataDir, profileId, onProgress = 
   }
 
   return {
+    packId: pack.id,
+    packTitle: pack.title,
     installed,
     skipped,
+    mods: listProfileMods(dataDir, profileId)
+  };
+}
+
+async function installPeakFpsPack(params) {
+  return installCuratedPack({ ...params, packId: 'fps' });
+}
+
+async function checkAndUpdateProfileMods({
+  mcVersion,
+  dataDir,
+  profileId,
+  applyUpdates = false,
+  onProgress = null
+}) {
+  const installed = listProfileMods(dataDir, profileId);
+  const trackable = installed.filter((m) => m.projectId);
+  const updatesAvailable = [];
+  const updated = [];
+
+  for (let i = 0; i < trackable.length; i++) {
+    const mod = trackable[i];
+    try {
+      const versions = await fetchCompatibleVersions({
+        projectId: mod.projectId,
+        mcVersion,
+        projectType: 'mod'
+      });
+      if (!Array.isArray(versions) || versions.length === 0) continue;
+      const latest = versions.find((v) => v.version_type === 'release') || versions[0];
+      if (!latest) continue;
+
+      const isDifferentId = mod.versionId ? latest.id !== mod.versionId : false;
+      const isDifferentVer =
+        !mod.versionId && mod.version && latest.version_number !== mod.version;
+
+      if (isDifferentId || isDifferentVer) {
+        const entry = {
+          projectId: mod.projectId,
+          title: mod.name,
+          currentVersion: mod.version || mod.versionId || '?',
+          latestVersion: latest.version_number || latest.name,
+          latestVersionId: latest.id
+        };
+        updatesAvailable.push(entry);
+
+        if (applyUpdates) {
+          if (onProgress) {
+            onProgress({
+              stage: 'mods',
+              message: `Aktualizowanie ${mod.name} -> ${entry.latestVersion}...`
+            });
+          }
+          await installModrinthContent({
+            projectId: mod.projectId,
+            versionId: latest.id,
+            projectType: 'mod',
+            mcVersion,
+            dataDir,
+            profileId,
+            projectMeta: {
+              projectId: mod.projectId,
+              title: mod.name,
+              description: mod.description,
+              iconUrl: mod.iconUrl || ''
+            },
+            onProgress
+          });
+          updated.push(entry);
+        }
+      }
+    } catch {
+      // Skip transient API error for individual mod
+    }
+  }
+
+  return {
+    checked: trackable.length,
+    updatesAvailable,
+    updated,
     mods: listProfileMods(dataDir, profileId)
   };
 }
@@ -431,12 +784,22 @@ async function installPeakFpsPack({ mcVersion, dataDir, profileId, onProgress = 
 module.exports = {
   MODRINTH_API_BASE,
   PEAK_FPS_PACK_IDS,
+  PEAK_PACKS,
+  getContentDir,
   getProfileModsDir,
+  listProfileContent,
   listProfileMods,
+  toggleContent,
   toggleMod,
+  deleteContent,
   deleteMod,
+  importLocalContent,
   importLocalMods,
   searchModrinth,
+  getModrinthProjectDetails,
+  installModrinthContent,
   installModrinthMod,
-  installPeakFpsPack
+  installCuratedPack,
+  installPeakFpsPack,
+  checkAndUpdateProfileMods
 };
