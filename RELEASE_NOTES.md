@@ -1,6 +1,4 @@
-### Najważniejsze nowości w wersji 1.1.0 — Alpine Aurora & Summit Glass GUI
-- **Żywa atmosfera Góry PEAK (`Alpine Aurora`)**: płynąca zorza polarna, gwiazdozbiór wysokogórski i opadający śnieg na animowanym płótnie z paralaksą kursora (automatycznie wstrzymywane w tle) oraz efekt szkła z podświetleniem kursora (`spotlight`) na kartach.
-- **Przebudowany kokpit Szczytu (`Graj`)**: mapa topograficzna konturów górskich i panoramiczne okno szczytu w hero decku, szybki pasek podglądu modów z przyciskiem **⚡ Boost FPS (1 klik)**, pływający dock startowy z 5-etapowym wskaźnikiem przygotowania gry oraz animowany przycisk **GRAJ**.
-- **Pływający panel boczny i telemetria**: boczna belka z awatarem głowy gracza (`minotar.net` z automatycznym fallbackiem), paskiem przydziału RAM i podsumowaniem wykrytych środowisk Java.
-- **Personalizowane karty ekspedycji**: 4 motywy kolorystyczne profili (*Szczyt*, *Lodowiec*, *Grań*, *Zorza*) wybierane w kreatorze oraz przycisk szybkiego uruchomienia `▶ Graj` bezpośrednio na karcie profilu.
-- **Dopracowane widoki Modów, Wersji, Javy i Konsoli**: rozszerzony baner **Pakietu Peak FPS Boost**, kolorowe odznaki kategorii modów i typów wersji oraz logi konsoli z kolorowymi znacznikami poziomów.
+### Najważniejsze nowości w wersji 1.2.0 — Peak Cinema GUI
+- **Pełnoekranowe kinowe tło szczytów górskich**: brak ciężkich paneli i lewej belki bocznej — czysta panorama Góry PEAK na pierwszym planie oraz płynny efekt głębi ostrości (`blur`) podczas przeglądania zakładek **Mody**, **Wersje**, **Java i Fabric** oraz **Opcje**.
+- **Prostszy ekran startowy (`Graj`)**: przejrzysty górny pasek nawigacji, czytelna linia wersji gry, szybki pasek wyboru profili bezpośrednio nad dolną krawędzią oraz wyrazisty przycisk **GRAJ**.
+- **Zachowana pełna funkcjonalność**: ponad 925 wersji Minecrafta z Mojang, instalacja modów z Modrinth jednym kliknięciem wraz z zależnościami (`Fabric API`), Pakiet Peak FPS, Drag & Drop `.jar` oraz automatyczne pobieranie Javy (8/17/21/25) i Fabrica.

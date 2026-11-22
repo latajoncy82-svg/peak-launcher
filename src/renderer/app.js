@@ -18,7 +18,6 @@
     versionsLimit: 80,
     activeView: 'play',
     editingProfileId: null,
-    selectedCrest: 'summit',
     logs: [],
     javaDownloadingMajor: null
   };
@@ -44,19 +43,6 @@
     old_alpha: 'violet'
   };
 
-  const CATEGORY_LABELS = {
-    optimization: 'Optymalizacja',
-    utility: 'Narzędzia',
-    adventure: 'Przygoda',
-    worldgen: 'Świat',
-    technology: 'Technologia',
-    decoration: 'Dekoracje',
-    library: 'Biblioteka',
-    fabric: 'Fabric'
-  };
-
-  const STAGE_ORDER = ['version', 'java', 'fabric', 'assets', 'ready'];
-
   const $ = (id) => document.getElementById(id);
 
   function showToast(message, type = 'info') {
@@ -65,7 +51,7 @@
     div.className = `toast ${type}`;
     div.textContent = message;
     stack.appendChild(div);
-    setTimeout(() => div.remove(), 4200);
+    setTimeout(() => div.remove(), 4000);
   }
 
   function appendLog(entry) {
@@ -109,10 +95,6 @@
     document.documentElement.dataset.theme = mode;
     $('icon-sun').classList.toggle('hidden', mode !== 'alpine-dark');
     $('icon-moon').classList.toggle('hidden', mode === 'alpine-dark');
-    const lbl = $('theme-pill-label');
-    if (lbl) {
-      lbl.textContent = mode === 'alpine-dark' ? 'Nocny Szczyt' : 'Lodowcowy Dzień';
-    }
     document.querySelectorAll('.theme-option').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.themeChoice === mode);
     });
@@ -148,7 +130,8 @@
 
   function switchView(viewName) {
     state.activeView = viewName;
-    document.querySelectorAll('.nav-item').forEach((btn) => {
+    document.body.classList.toggle('overlay-open', viewName !== 'play');
+    document.querySelectorAll('.top-nav-item').forEach((btn) => {
       btn.classList.toggle('active', btn.dataset.view === viewName);
     });
     document.querySelectorAll('.view').forEach((sec) => {
@@ -163,247 +146,89 @@
     }
   }
 
-  function updateStagePipeline(stageKey) {
-    const normalized = stageKey === 'client' || stageKey === 'libraries' ? 'assets' : stageKey;
-    const activeIdx = STAGE_ORDER.indexOf(normalized);
-    document.querySelectorAll('#dock-stages .stage-step').forEach((step) => {
-      const idx = STAGE_ORDER.indexOf(step.dataset.stage);
-      step.classList.toggle('active', activeIdx !== -1 && idx === activeIdx);
-      step.classList.toggle('done', activeIdx !== -1 && idx < activeIdx);
-    });
-  }
-
-  function renderTelemetry() {
-    if (!state.appState) return;
-    const mem = state.appState.systemMemory || { totalMb: 16384 };
-    const ramMb = getActiveProfile()?.ramMb || state.appState.settings.ramMb || 4096;
-    const ramGb = (ramMb / 1024).toFixed(1);
-    const totalGb = Math.round(mem.totalMb / 1024);
-    const pct = Math.min(100, Math.max(8, Math.round((ramMb / Math.max(1024, mem.totalMb)) * 100)));
-
-    $('sidebar-ram-text').textContent = `${ramGb} / ${totalGb} GB`;
-    $('sidebar-ram-fill').style.width = `${pct}%`;
-
-    const majors = [25, 21, 17, 8].filter((m) => Boolean(state.javaData.byMajor[m]));
-    $('sidebar-java-summary').textContent =
-      majors.length > 0 ? `Java ${majors.join(', ')}` : 'Brak';
-  }
-
-  function renderHeroModsStrip(profile) {
-    const strip = $('hero-mods-strip');
-    if (!strip) return;
-    if (profile.loader !== 'fabric') {
-      strip.innerHTML = `
-        <span class="mods-strip-empty">Tryb Vanilla — przełącz profil na Fabric, aby instalować mody z Modrinth jednym kliknięciem</span>
-        <button id="btn-hero-enable-fabric" class="btn-mini-action" type="button">Przełącz na Fabric</button>
-      `;
-      strip.querySelector('#btn-hero-enable-fabric').addEventListener('click', async () => {
-        const res = await api.enableFabricOnProfile(profile.id, 'latest');
-        state.appState = res.state;
-        renderAll();
-        showToast(`Profil "${profile.name}" przełączony na Fabric!`, 'success');
-      });
-      return;
-    }
-
-    if (state.mods.length === 0) {
-      strip.innerHTML = `
-        <span class="mods-strip-empty">Brak modów — zainstaluj pakiet startowy <strong>Fabric API + Sodium + Lithium</strong> lub przeglądaj Modrinth</span>
-        <button id="btn-hero-fps-boost" class="btn-mini-emerald" type="button">⚡ Boost FPS (1 klik)</button>
-      `;
-      strip.querySelector('#btn-hero-fps-boost').addEventListener('click', () => runFpsPackInstall(strip.querySelector('#btn-hero-fps-boost')));
-      return;
-    }
-
-    const previewMods = state.mods.slice(0, 4);
-    const extra = state.mods.length - previewMods.length;
-    strip.innerHTML = `
-      <div class="mods-strip-pills">
-        ${previewMods.map((m) => `<span class="mod-mini-chip">${m.name}</span>`).join('')}
-        ${extra > 0 ? `<span class="mod-mini-chip">+${extra} więcej</span>` : ''}
-      </div>
-      <button id="btn-hero-more-mods" class="chip-btn" type="button">+ Dodaj mody</button>
-    `;
-    strip.querySelector('#btn-hero-more-mods').addEventListener('click', () => switchView('mods'));
-  }
-
   function renderPlayView() {
     if (!state.appState) return;
     const profile = getActiveProfile();
     const account = getActiveAccount();
     if (!profile) return;
 
-    renderAvatarElement($('sidebar-avatar'), account?.username);
-    renderAvatarElement($('dock-avatar'), account?.username);
-    $('sidebar-username').textContent = account?.username || 'PeakPlayer';
+    renderAvatarElement($('topbar-avatar'), account?.username);
+    $('topbar-username').textContent = account?.username || 'PeakPlayer';
 
     $('hero-profile-name').textContent = profile.name;
-    $('hero-profile-sub').textContent =
-      profile.loader === 'fabric'
-        ? `Izolowana ekspedycja Fabric dla Minecraft ${profile.mcVersion} — gotowa na mody Modrinth i pliki .jar.`
-        : `Czyste wydanie Minecraft ${profile.mcVersion} (Vanilla) z własnym katalogiem zapisów.`;
-    $('hero-mc-badge').textContent = `Minecraft ${profile.mcVersion}`;
+    $('hero-mc-badge').textContent = `MINECRAFT ${profile.mcVersion.toUpperCase()}`;
     $('hero-loader-badge').textContent =
       profile.loader === 'fabric'
-        ? `Fabric (${profile.fabricVersion === 'latest' ? 'najnowszy' : profile.fabricVersion})`
-        : 'Vanilla (bez modloadera)';
-    $('hero-mods-badge').textContent = `${state.mods.length} ${state.mods.length === 1 ? 'mod' : state.mods.length >= 2 && state.mods.length <= 4 ? 'mody' : 'modów'}`;
-    $('nav-mods-count').textContent = String(state.mods.length);
+        ? profile.fabricVersion && profile.fabricVersion !== 'latest'
+          ? `FABRIC ${profile.fabricVersion}`
+          : 'FABRIC'
+        : 'VANILLA';
+    const modCount = state.mods.length;
+    const modWord = modCount === 1 ? 'MOD' : modCount >= 2 && modCount <= 4 ? 'MODY' : 'MODÓW';
+    $('btn-hero-go-mods').textContent = `${modCount} ${modWord}`;
 
-    renderHeroModsStrip(profile);
-    renderTelemetry();
-
-    // Java readiness
+    // Readiness pills shown ONLY when missing
     const reqJava = getRequiredJavaForMc(profile.mcVersion);
     const hasJava = Boolean(state.javaData.byMajor[reqJava]);
-    const javaText = $('readiness-java-text');
-    const javaIcon = $('readiness-java-icon');
     const javaBtn = $('btn-quick-install-java');
     if (hasJava) {
-      const j = state.javaData.byMajor[reqJava];
-      javaText.className = 'readiness-ok';
-      javaText.textContent = `Java ${reqJava} gotowa (${j.rawVersion})`;
-      javaIcon.className = 'readiness-icon ok';
-      javaIcon.textContent = '✓';
       javaBtn.classList.add('hidden');
       $('nav-java-alert').classList.add('hidden');
     } else {
-      javaText.className = 'readiness-warn';
-      javaText.textContent = `Wymagana Java ${reqJava} (pobierze się sama lub kliknij)`;
-      javaIcon.className = 'readiness-icon warn';
-      javaIcon.textContent = '!';
       javaBtn.textContent = `Pobierz Javę ${reqJava}`;
       javaBtn.dataset.major = String(reqJava);
       javaBtn.classList.remove('hidden');
       $('nav-java-alert').classList.remove('hidden');
     }
 
-    // Fabric readiness
-    const fabText = $('readiness-fabric-text');
-    const fabIcon = $('readiness-fabric-icon');
     const fabBtn = $('btn-quick-install-fabric');
-    if (profile.loader !== 'fabric') {
-      fabText.className = '';
-      fabText.textContent = 'Nie dotyczy (profil Vanilla)';
-      fabIcon.className = 'readiness-icon';
-      fabIcon.textContent = '◇';
-      fabBtn.classList.add('hidden');
-    } else {
+    if (profile.loader === 'fabric') {
       const installed = (state.appState.installedFabric || []).find(
         (f) => f.inheritsFrom === profile.mcVersion
       );
-      if (installed) {
-        fabText.className = 'readiness-ok';
-        fabText.textContent = `Fabric ${installed.loaderVersion} zainstalowany`;
-        fabIcon.className = 'readiness-icon ok';
-        fabIcon.textContent = '✓';
-        fabBtn.classList.add('hidden');
-      } else {
-        fabText.className = 'readiness-warn';
-        fabText.textContent = `Gotowy do instalacji (${profile.mcVersion})`;
-        fabIcon.className = 'readiness-icon warn';
-        fabIcon.textContent = '◈';
-        fabBtn.classList.remove('hidden');
-      }
+      fabBtn.classList.toggle('hidden', Boolean(installed));
+    } else {
+      fabBtn.classList.add('hidden');
     }
 
-    // Profiles Grid
-    const grid = $('profiles-grid');
-    grid.innerHTML = '';
+    $('btn-hero-delete-profile').classList.toggle('hidden', state.appState.profiles.length <= 1);
+
+    // Minimal Profile Strip
+    const strip = $('profiles-strip');
+    strip.innerHTML = '';
     for (const p of state.appState.profiles) {
       const isActive = p.id === profile.id;
-      const crest = ['summit', 'glacier', 'ridge', 'alpenglow'].includes(p.icon) ? p.icon : 'summit';
-      const card = document.createElement('div');
-      card.className = `profile-card spotlight-card ${isActive ? 'active' : ''}`;
-      card.dataset.crest = crest;
-      card.innerHTML = `
-        <div class="profile-card-top">
-          <strong class="profile-card-title"></strong>
-          ${isActive ? '<span class="profile-active-tag">AKTYWNY</span>' : ''}
-        </div>
-        <div class="profile-card-meta">
-          <span class="tag-pill">MC ${p.mcVersion}</span>
-          <span class="tag-pill ${p.loader === 'vanilla' ? 'vanilla' : ''}">${p.loader === 'fabric' ? 'Fabric' : 'Vanilla'}</span>
-          <span class="tag-pill mods">Java ${getRequiredJavaForMc(p.mcVersion)}</span>
-        </div>
-        <div class="profile-card-actions">
-          <button class="btn-card-play" type="button" data-act="play">▶ Graj</button>
-          <button type="button" data-act="mods">Mody</button>
-          <button type="button" data-act="edit">Edytuj</button>
-          <button type="button" data-act="folder">Folder</button>
-          ${state.appState.profiles.length > 1 ? '<button type="button" data-act="delete">Usuń</button>' : ''}
-        </div>
-      `;
-      card.querySelector('.profile-card-title').textContent = p.name;
-      card.addEventListener('click', async (e) => {
-        const actBtn = e.target.closest('button[data-act]');
-        if (actBtn) {
-          e.stopPropagation();
-          const act = actBtn.dataset.act;
-          if (act === 'play') {
-            await selectProfile(p.id);
-            await startOrStopGame();
-          } else if (act === 'mods') {
-            await selectProfile(p.id);
-            switchView('mods');
-          } else if (act === 'edit') {
-            openProfileModal(p);
-          } else if (act === 'folder') {
-            await api.openProfileFolder(p.id);
-          } else if (act === 'delete') {
-            const nextState = await api.deleteProfile(p.id);
-            state.appState = nextState;
-            await refreshActiveProfileMods();
-            renderAll();
-            showToast('Usunięto profil.', 'info');
-          }
-          return;
-        }
-        await selectProfile(p.id);
-      });
-      grid.appendChild(card);
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = `profile-pill ${isActive ? 'active' : ''}`;
+      pill.innerHTML = `<span class="profile-pill-name"></span><span class="profile-pill-ver">${p.mcVersion}</span>`;
+      pill.querySelector('.profile-pill-name').textContent = p.name;
+      pill.addEventListener('click', () => selectProfile(p.id));
+      strip.appendChild(pill);
     }
 
-    // Dock account select & RAM
-    const accSelect = $('dock-account-select');
-    accSelect.innerHTML = '';
-    for (const acc of state.appState.accounts) {
-      const opt = document.createElement('option');
-      opt.value = acc.id;
-      opt.textContent = acc.username;
-      opt.selected = acc.id === state.appState.activeAccountId;
-      accSelect.appendChild(opt);
-    }
-
-    const ram = profile.ramMb || state.appState.settings.ramMb;
-    $('dock-ram-badge').textContent = `${ram} MB RAM`;
     updateLaunchButtonUI(state.appState.launchStatus);
   }
 
   function updateLaunchButtonUI(launchStatus) {
     const btn = $('btn-play');
     const lbl = $('btn-play-label');
-    const tbPill = $('titlebar-status-pill');
-    const tbText = $('titlebar-status-text');
+    const progBox = $('launch-progress-box');
 
     if (launchStatus && launchStatus.running) {
       btn.disabled = false;
       btn.classList.add('running');
       lbl.textContent = 'ZATRZYMAJ';
-      if (tbPill) tbPill.classList.add('running');
-      if (tbText) tbText.textContent = 'W GRZE';
+      progBox.classList.add('hidden');
     } else if (launchStatus && launchStatus.preparing) {
       btn.disabled = true;
       btn.classList.remove('running');
       lbl.textContent = 'START...';
-      if (tbPill) tbPill.classList.add('running');
-      if (tbText) tbText.textContent = 'PRZYGOTOWANIE';
+      progBox.classList.remove('hidden');
     } else {
       btn.disabled = false;
       btn.classList.remove('running');
       lbl.textContent = 'GRAJ';
-      if (tbPill) tbPill.classList.remove('running');
-      if (tbText) tbText.textContent = 'GOTOWY DO LOTU';
     }
   }
 
@@ -426,9 +251,8 @@
       return true;
     });
 
-    $('nav-versions-count').textContent = String(state.manifest.versions.length);
     $('versions-subtitle').textContent =
-      `Znaleziono ${filtered.length} z ${state.manifest.versions.length} wersji (najnowsza stabilna: ${state.manifest.latest.release}).`;
+      `Wyświetlono ${Math.min(filtered.length, state.versionsLimit)} z ${filtered.length} pasujących wersji (łącznie ${state.manifest.versions.length} w bazie Mojang).`;
 
     const slice = filtered.slice(0, state.versionsLimit);
     tbody.innerHTML = '';
@@ -455,11 +279,10 @@
       tr.querySelector('button[data-ver-create]').addEventListener('click', () => {
         openProfileModal({
           id: null,
-          name: hasFabric ? `Szczyt ${v.id} (Fabric)` : `Minecraft ${v.id}`,
+          name: hasFabric ? `Szczyt ${v.id}` : `Minecraft ${v.id}`,
           mcVersion: v.id,
           loader: hasFabric ? 'fabric' : 'vanilla',
-          fabricVersion: 'latest',
-          icon: hasFabric ? 'summit' : 'ridge'
+          fabricVersion: 'latest'
         });
       });
       tbody.appendChild(tr);
@@ -490,18 +313,17 @@
     $('mods-vanilla-callout').classList.toggle('hidden', profile.loader === 'fabric');
     $('mods-mc-pill').textContent = `${profile.loader === 'fabric' ? 'Fabric' : 'Vanilla'} · MC ${profile.mcVersion}`;
     $('mods-tab-count').textContent = String(state.mods.length);
-    $('nav-mods-count').textContent = String(state.mods.length);
 
     const listEl = $('installed-mods-list');
     listEl.innerHTML = '';
     if (state.mods.length === 0) {
-      listEl.innerHTML = `<div class="empty-state">Brak zainstalowanych modów w profilu <strong>${profile.name}</strong>. Przejdź do zakładki „Przeglądaj Modrinth” lub przeciągnij plik <code>.jar</code> powyżej!</div>`;
+      listEl.innerHTML = `<div class="empty-state">Brak zainstalowanych modów w profilu <strong>${profile.name}</strong>. Dodaj mody w zakładce Modrinth lub przeciągnij plik <code>.jar</code> powyżej.</div>`;
       return;
     }
 
     for (const mod of state.mods) {
       const row = document.createElement('div');
-      row.className = `installed-mod-row spotlight-card ${mod.enabled ? '' : 'disabled'}`;
+      row.className = `installed-mod-row ${mod.enabled ? '' : 'disabled'}`;
       const sizeKb = Math.max(1, Math.round(mod.size / 1024));
       row.innerHTML = `
         <div class="installed-mod-main">
@@ -560,7 +382,7 @@
       return;
     }
     if (!state.modrinthHits || state.modrinthHits.length === 0) {
-      grid.innerHTML = `<div class="empty-state">Brak wyników dla Minecraft ${profile?.mcVersion || ''} w wybranym filtrze. Spróbuj innej frazy lub kategorii.</div>`;
+      grid.innerHTML = `<div class="empty-state">Brak wyników dla Minecraft ${profile?.mcVersion || ''} w wybranym filtrze.</div>`;
       return;
     }
 
@@ -569,31 +391,26 @@
 
     for (const hit of state.modrinthHits) {
       const isInstalled = installedIds.has(hit.projectId);
-      const cats = (hit.categories || [])
-        .filter((c) => CATEGORY_LABELS[c] && c !== 'fabric')
-        .slice(0, 2);
-
       const card = document.createElement('div');
-      card.className = 'mod-card spotlight-card';
+      card.className = 'mod-card';
       card.innerHTML = `
         <div class="mod-card-head">
           <img class="mod-icon" src="${hit.iconUrl || '../../assets/icon-64.png'}" alt="" loading="lazy" />
           <div class="mod-title-wrap">
             <strong></strong>
             <span class="mod-author"></span>
-            ${cats.length > 0 ? `<div class="mod-cats">${cats.map((c) => `<span class="mod-cat-tag">${CATEGORY_LABELS[c]}</span>`).join('')}</div>` : ''}
           </div>
         </div>
         <p class="mod-desc"></p>
         <div class="mod-card-foot">
-          <span class="mod-downloads">↓ ${formatDownloads(hit.downloads)}</span>
+          <span class="mod-downloads">${formatDownloads(hit.downloads)}</span>
           <button class="${isInstalled ? 'btn-outline' : 'btn-accent'}" type="button" ${isInstalled ? 'disabled' : ''}>
-            ${isInstalled ? 'Dodany ✓' : 'Dodaj mod'}
+            ${isInstalled ? 'Dodany ✓' : 'Dodaj'}
           </button>
         </div>
       `;
       card.querySelector('.mod-title-wrap strong').textContent = hit.title;
-      card.querySelector('.mod-author').textContent = `autor: ${hit.author}`;
+      card.querySelector('.mod-author').textContent = hit.author;
       card.querySelector('.mod-desc').textContent = hit.description || '';
 
       const addBtn = card.querySelector('button');
@@ -625,7 +442,7 @@
             renderPlayView();
           } catch (err) {
             addBtn.disabled = false;
-            addBtn.textContent = 'Dodaj mod';
+            addBtn.textContent = 'Dodaj';
             showToast(err.message, 'error');
           }
         });
@@ -708,7 +525,7 @@
       const busy = state.javaDownloadingMajor === major;
 
       const card = document.createElement('div');
-      card.className = `java-card spotlight-card ${detected ? 'ready' : ''}`;
+      card.className = `java-card ${detected ? 'ready' : ''}`;
       card.innerHTML = `
         <div class="java-card-top">
           <strong>Java ${major}</strong>
@@ -792,7 +609,7 @@
     fabList.innerHTML = '';
     const installedFab = state.appState?.installedFabric || [];
     if (installedFab.length === 0) {
-      fabList.innerHTML = '<div class="compact-row">Brak pobranych wersji Fabric (zainstaluje się automatycznie przy starcie gry lub kliknij obok).</div>';
+      fabList.innerHTML = '<div class="compact-row">Brak pobranych wersji Fabric (zainstaluje się automatycznie przy starcie).</div>';
     } else {
       for (const f of installedFab) {
         const row = document.createElement('div');
@@ -927,20 +744,10 @@
     }
   }
 
-  function setSelectedCrest(crest) {
-    state.selectedCrest = ['summit', 'glacier', 'ridge', 'alpenglow'].includes(crest) ? crest : 'summit';
-    document.querySelectorAll('#prof-crest-picker .crest-option').forEach((btn) => {
-      btn.classList.toggle('active', btn.dataset.crest === state.selectedCrest);
-    });
-  }
-
   async function openProfileModal(existingProfile = null) {
     state.editingProfileId = existingProfile && existingProfile.id ? existingProfile.id : null;
-    $('modal-profile-title').textContent = state.editingProfileId
-      ? 'Edytuj profil'
-      : 'Nowy profil (Ekspedycja)';
+    $('modal-profile-title').textContent = state.editingProfileId ? 'Edytuj profil' : 'Nowy profil';
     $('prof-name-input').value = existingProfile?.name || '';
-    setSelectedCrest(existingProfile?.icon || 'summit');
     $('prof-mc-filter').value = '';
     const defaultMc = existingProfile?.mcVersion || state.manifest?.latest?.release || '26.3';
     populateProfileModalVersions('', defaultMc);
@@ -979,20 +786,18 @@
     const profile = getActiveProfile();
     if (!profile) return;
     updateLaunchButtonUI({ preparing: true });
-    updateStagePipeline('version');
     $('dock-progress-label').textContent = 'Przygotowywanie gry...';
+    $('dock-progress-pct').textContent = '5%';
     $('dock-progress-bar').style.width = '5%';
     try {
       const res = await api.launchProfile(profile.id);
       state.appState = res.state;
       updateLaunchButtonUI({ running: true });
-      updateStagePipeline('ready');
-      $('dock-progress-label').textContent = `Minecraft ${profile.mcVersion} uruchomiony (PID ${res.pid})`;
+      $('dock-progress-label').textContent = `Minecraft ${profile.mcVersion} uruchomiony`;
       $('dock-progress-bar').style.width = '100%';
       $('dock-progress-pct').textContent = '100%';
     } catch (err) {
       updateLaunchButtonUI({ running: false });
-      updateStagePipeline(null);
       $('dock-progress-label').textContent = `Błąd: ${err.message}`;
       showToast(err.message, 'error');
     }
@@ -1016,17 +821,15 @@
       applyTheme(next);
     });
 
-    document.querySelectorAll('.nav-item').forEach((btn) => {
+    document.querySelectorAll('.top-nav-item').forEach((btn) => {
       btn.addEventListener('click', () => switchView(btn.dataset.view));
     });
-    $('btn-open-data-dir').addEventListener('click', () => api.openPath(state.appState?.dataDir));
 
-    const openAccModal = () => {
+    $('topbar-account-btn').addEventListener('click', () => {
       $('account-nick-input').value = getActiveAccount()?.username || 'PeakPlayer';
       $('modal-account').classList.remove('hidden');
       $('account-nick-input').focus();
-    };
-    $('sidebar-account-btn').addEventListener('click', openAccModal);
+    });
     $('modal-account-close').addEventListener('click', () => $('modal-account').classList.add('hidden'));
     $('modal-account-cancel').addEventListener('click', () => $('modal-account').classList.add('hidden'));
     $('modal-account-save').addEventListener('click', async () => {
@@ -1047,12 +850,15 @@
     $('btn-new-profile').addEventListener('click', () => openProfileModal(null));
     $('btn-hero-edit-profile').addEventListener('click', () => openProfileModal(getActiveProfile()));
     $('btn-hero-open-folder').addEventListener('click', () => api.openProfileFolder(getActiveProfile()?.id));
-    $('btn-hero-go-mods').addEventListener('click', () => switchView('mods'));
-
-    $('dock-ram-badge').addEventListener('click', () => {
-      switchView('console');
-      document.querySelector('[data-consoletab="settings"]').click();
+    $('btn-hero-delete-profile').addEventListener('click', async () => {
+      const active = getActiveProfile();
+      if (!active || state.appState.profiles.length <= 1) return;
+      state.appState = await api.deleteProfile(active.id);
+      await refreshActiveProfileMods();
+      renderAll();
+      showToast('Usunięto profil.', 'info');
     });
+    $('btn-hero-go-mods').addEventListener('click', () => switchView('mods'));
 
     $('btn-quick-install-java').addEventListener('click', async () => {
       const major = Number($('btn-quick-install-java').dataset.major || 21);
@@ -1063,24 +869,20 @@
     $('btn-quick-install-fabric').addEventListener('click', async () => {
       const profile = getActiveProfile();
       if (!profile) return;
-      $('btn-quick-install-fabric').disabled = true;
-      $('btn-quick-install-fabric').textContent = 'Instalowanie...';
+      const btn = $('btn-quick-install-fabric');
+      btn.disabled = true;
+      btn.textContent = 'Instalowanie...';
       try {
         const res = await api.enableFabricOnProfile(profile.id, profile.fabricVersion || 'latest');
         state.appState = res.state;
         renderAll();
-        showToast(`Zainstalowano Fabric ${res.installed.loaderVersion} dla ${profile.mcVersion}!`, 'success');
+        showToast(`Zainstalowano Fabric ${res.installed.loaderVersion}!`, 'success');
       } catch (err) {
         showToast(err.message, 'error');
       } finally {
-        $('btn-quick-install-fabric').disabled = false;
+        btn.disabled = false;
+        btn.textContent = 'Zainstaluj Fabric';
       }
-    });
-
-    $('dock-account-select').addEventListener('change', async (e) => {
-      const res = await api.selectAccount(e.target.value);
-      state.appState = res.state;
-      renderAll();
     });
 
     $('btn-play').addEventListener('click', startOrStopGame);
@@ -1316,10 +1118,6 @@
 
     $('modal-profile-close').addEventListener('click', () => $('modal-profile').classList.add('hidden'));
     $('modal-profile-cancel').addEventListener('click', () => $('modal-profile').classList.add('hidden'));
-    $('prof-crest-picker').addEventListener('click', (e) => {
-      const btn = e.target.closest('.crest-option');
-      if (btn) setSelectedCrest(btn.dataset.crest);
-    });
     $('prof-mc-filter').addEventListener('input', (e) => {
       populateProfileModalVersions(e.target.value, $('prof-mc-select').value);
     });
@@ -1339,7 +1137,6 @@
       const fabricVersion = $('prof-fabric-select').value || 'latest';
       const ramRaw = $('prof-ram-input').value.trim();
       const ramMb = ramRaw ? Number(ramRaw) : null;
-      const icon = state.selectedCrest || 'summit';
 
       try {
         if (state.editingProfileId) {
@@ -1348,8 +1145,7 @@
             mcVersion,
             loader,
             fabricVersion,
-            ramMb,
-            icon
+            ramMb
           });
           state.appState = res.state;
         } else {
@@ -1358,23 +1154,22 @@
             mcVersion,
             loader,
             fabricVersion,
-            ramMb,
-            icon
+            ramMb
           });
           state.appState = res.state;
         }
         $('modal-profile').classList.add('hidden');
         await refreshActiveProfileMods();
         renderAll();
-        showToast('Zapisano profil ekspedycji!', 'success');
+        showToast('Zapisano profil!', 'success');
       } catch (err) {
         showToast(err.message, 'error');
       }
     });
 
     api.onLauncherProgress((p) => {
+      $('launch-progress-box').classList.remove('hidden');
       $('dock-progress-label').textContent = p.message || 'Przetwarzanie...';
-      updateStagePipeline(p.stage);
       if (typeof p.percent === 'number') {
         $('dock-progress-bar').style.width = `${p.percent}%`;
         $('dock-progress-pct').textContent = `${p.percent}%`;
@@ -1392,15 +1187,17 @@
             : 'Status: gotowy';
       if (st.state === 'idle') {
         updateLaunchButtonUI({ running: false });
-        updateStagePipeline(null);
-        $('dock-progress-label').textContent = st.error ? `Błąd: ${st.error}` : 'Gotowy do wspinaczki';
-        $('dock-progress-pct').textContent = '';
-        if (!st.error) $('dock-progress-bar').style.width = '0%';
+        if (st.error) {
+          $('launch-progress-box').classList.remove('hidden');
+          $('dock-progress-label').textContent = `Błąd: ${st.error}`;
+        } else {
+          $('launch-progress-box').classList.add('hidden');
+          $('dock-progress-bar').style.width = '0%';
+        }
         state.appState = await api.getState();
         renderPlayView();
       } else if (st.state === 'running') {
         updateLaunchButtonUI({ running: true });
-        updateStagePipeline('ready');
       }
     });
 
@@ -1420,6 +1217,7 @@
 
     api.onModsProgress((p) => {
       if (p && p.message) {
+        $('launch-progress-box').classList.remove('hidden');
         $('dock-progress-label').textContent = p.message;
       }
     });
@@ -1430,7 +1228,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Uruchomiono Peak Launcher v1.1.0 (Alpine Aurora GUI).', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Uruchomiono Peak Launcher v1.2.0 (Peak Cinema GUI).', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

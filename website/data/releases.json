@@ -1,9 +1,31 @@
 [
   {
+    "tag": "v1.2.0",
+    "name": "Peak Launcher 1.2.0 — Peak Cinema GUI",
+    "publishedAt": "2026-11-22T16:40:00Z",
+    "body": "### Najważniejsze nowości w wersji 1.2.0\n- **Kinowy, prostszy interfejs (`Peak Cinema`)**: usunięto boczną belkę i zbędne ramki na ekranie głównym — panorama Góry PEAK zajmuje cały ekran, a pozostałe widoki otwierają się jako przejrzyste szklane nakładki z efektem głębi ostrości.\n- **Minimalistyczny górny pasek**: szybkie przełączanie widoków `Graj`, `Mody`, `Wersje`, `Java i Fabric` i `Opcje`, z avatarem gracza i przełącznikiem motywu.\n- **Pełna automatyzacja bez zmian**: wszystkie 925+ wersji Minecrafta, Modrinth + Drag & Drop `.jar`, automatyczna Java `8 / 17 / 21 / 25` oraz Fabric Loader jednym kliknięciem.",
+    "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.2.0",
+    "prerelease": false,
+    "assets": {
+      "installer": {
+        "name": "Peak-Launcher-Setup-1.2.0.exe",
+        "size": 123336295,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.2.0/Peak-Launcher-Setup-1.2.0.exe",
+        "downloadCount": 0
+      },
+      "portable": {
+        "name": "Peak-Launcher-Portable-1.2.0.exe",
+        "size": 112017599,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.2.0/Peak-Launcher-Portable-1.2.0.exe",
+        "downloadCount": 0
+      }
+    }
+  },
+  {
     "tag": "v1.1.0",
     "name": "Peak Launcher 1.1.0 — Alpine Aurora & Summit Glass GUI",
     "publishedAt": "2026-11-20T21:30:00Z",
-    "body": "### Najważniejsze nowości w wersji 1.1.0\n- **Żywa atmosfera Góry PEAK (Alpine Aurora)**: płynąca zorza polarna, gwiazdozbiór i śnieg na lekkim płótnie z paralaksą oraz podświetlenie kart pod kursorem (`spotlight`).\n- **Nowy kokpit Szczytu i pływający dock**: kontury topograficzne, okno panoramy szczytu, pasek podglądu modów z przyciskiem **Boost FPS (1 klik)**, 5-etapowy wskaźnik startu oraz awatar głowy gracza.\n- **Personalizacja profili ekspedycji**: 4 motywy kolorystyczne profili (*Szczyt*, *Lodowiec*, *Grań*, *Zorza*) oraz szybki przycisk `▶ Graj` bezpośrednio na kartach.\n- **Ulepszone Mody, Wersje i Konsola**: tagi kategorii modów Modrinth, pigułki typów wersji oraz czytelna telemetria RAM i Javy w panelu bocznym.",
+    "body": "### Najważniejsze nowości w wersji 1.1.0\n- **Żywa atmosfera Góry PEAK (Alpine Aurora)**: płynąca zorza polarna, gwiazdozbiór i śnieg na lekkim płótnie z paralaksą oraz podświetlenie kart pod kursorem (`spotlight`).\n- **Nowy kokpit Szczytu i pływający dock**: kontury topograficzne, okno panoramy szczytu, pasek podglądu modów z przyciskiem **Boost FPS (1 klik)**, 5-etapowy wskaźnik startu oraz awatar głowy gracza.",
     "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.1.0",
     "prerelease": false,
     "assets": {

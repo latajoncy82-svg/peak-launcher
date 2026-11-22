@@ -11,16 +11,15 @@
   let rafId = null;
   let paused = false;
   let pointerX = 0.5;
-  let pointerY = 0.3;
+  let pointerY = 0.35;
   let targetPointerX = 0.5;
-  let targetPointerY = 0.3;
+  let targetPointerY = 0.35;
 
   const stars = [];
   const snow = [];
   const ribbons = [
-    { baseY: 0.16, amp: 36, freq: 0.0022, speed: 0.28, color: 'rgba(16, 185, 129, 0.16)', offset: 0.4 },
-    { baseY: 0.23, amp: 44, freq: 0.0017, speed: -0.21, color: 'rgba(56, 189, 248, 0.17)', offset: 2.1 },
-    { baseY: 0.12, amp: 28, freq: 0.0028, speed: 0.16, color: 'rgba(59, 130, 246, 0.14)', offset: 4.0 }
+    { baseY: 0.16, amp: 32, freq: 0.0020, speed: 0.22, color: 'rgba(16, 185, 129, 0.09)', offset: 0.4 },
+    { baseY: 0.22, amp: 38, freq: 0.0016, speed: -0.18, color: 'rgba(56, 189, 248, 0.10)', offset: 2.1 }
   ];
 
   function rand(min, max) {
@@ -31,28 +30,28 @@
     stars.length = 0;
     snow.length = 0;
 
-    for (let i = 0; i < 85; i++) {
+    for (let i = 0; i < 64; i++) {
       stars.push({
         x: Math.random(),
-        y: rand(0.02, 0.56),
-        r: rand(0.6, 1.7),
+        y: rand(0.02, 0.52),
+        r: rand(0.55, 1.45),
         phase: rand(0, Math.PI * 2),
-        speed: rand(0.7, 2.2),
-        tint: i % 5 === 0 ? '#bae6fd' : '#ffffff'
+        speed: rand(0.6, 1.8),
+        tint: i % 4 === 0 ? '#bae6fd' : '#ffffff'
       });
     }
 
-    for (let i = 0; i < 64; i++) {
+    for (let i = 0; i < 48; i++) {
       const depth = rand(0.35, 1);
       snow.push({
         x: Math.random(),
         y: Math.random(),
         depth,
-        r: rand(0.9, 2.3) * depth,
-        vy: rand(0.00018, 0.00055) * depth,
-        vx: rand(-0.00009, 0.00014) * depth,
+        r: rand(0.85, 2.0) * depth,
+        vy: rand(0.00016, 0.00046) * depth,
+        vx: rand(-0.00007, 0.00012) * depth,
         wobble: rand(0, Math.PI * 2),
-        alpha: rand(0.18, 0.58) * depth
+        alpha: rand(0.16, 0.52) * depth
       });
     }
   }
@@ -74,50 +73,32 @@
   function drawAurora(timeSec) {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    const mx = (pointerX - 0.5) * 34;
-    const my = (pointerY - 0.5) * 18;
+    const mx = (pointerX - 0.5) * 28;
+    const my = (pointerY - 0.5) * 14;
 
     for (const rib of ribbons) {
-      const basePx = height * rib.baseY + my * 0.4;
-      const grad = ctx.createLinearGradient(0, basePx - 95, 0, basePx + 120);
+      const basePx = height * rib.baseY + my * 0.35;
+      const grad = ctx.createLinearGradient(0, basePx - 85, 0, basePx + 105);
       grad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-      grad.addColorStop(0.45, rib.color);
+      grad.addColorStop(0.48, rib.color);
       grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
       ctx.fillStyle = grad;
       ctx.beginPath();
-      ctx.moveTo(0, basePx + 130);
+      ctx.moveTo(0, basePx + 115);
 
       const step = 48;
       for (let x = 0; x <= width + step; x += step) {
         const wave =
           Math.sin((x + mx) * rib.freq + timeSec * rib.speed + rib.offset) * rib.amp +
-          Math.cos((x - mx) * rib.freq * 1.7 - timeSec * rib.speed * 0.7) * (rib.amp * 0.42);
+          Math.cos((x - mx) * rib.freq * 1.65 - timeSec * rib.speed * 0.7) * (rib.amp * 0.4);
         ctx.lineTo(x, basePx + wave);
       }
 
-      ctx.lineTo(width + step, basePx + 145);
+      ctx.lineTo(width + step, basePx + 125);
       ctx.closePath();
       ctx.fill();
     }
-    ctx.restore();
-  }
-
-  function drawDaylightGlow() {
-    ctx.save();
-    const glow = ctx.createRadialGradient(
-      width * 0.82,
-      height * 0.14,
-      10,
-      width * 0.82,
-      height * 0.14,
-      width * 0.48
-    );
-    glow.addColorStop(0, 'rgba(255, 255, 255, 0.45)');
-    glow.addColorStop(0.45, 'rgba(56, 189, 248, 0.12)');
-    glow.addColorStop(1, 'rgba(255, 255, 255, 0)');
-    ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, width, height);
     ctx.restore();
   }
 
@@ -130,12 +111,11 @@
     ctx.clearRect(0, 0, width, height);
 
     if (theme === 'alpine-dark') {
-      // Twinkling high-altitude stars
       for (const s of stars) {
         const twinkle = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(timeSec * s.speed + s.phase));
-        const px = s.x * width + (pointerX - 0.5) * -10;
-        const py = s.y * height + (pointerY - 0.5) * -6;
-        ctx.globalAlpha = twinkle * 0.72;
+        const px = s.x * width + (pointerX - 0.5) * -8;
+        const py = s.y * height + (pointerY - 0.5) * -5;
+        ctx.globalAlpha = twinkle * 0.62;
         ctx.fillStyle = s.tint;
         ctx.beginPath();
         ctx.arc(px, py, s.r, 0, Math.PI * 2);
@@ -143,15 +123,12 @@
       }
       ctx.globalAlpha = 1;
       drawAurora(timeSec);
-    } else {
-      drawDaylightGlow();
     }
 
-    // Floating alpine snow / ice dust
     for (const p of snow) {
       if (!prefersReducedMotion) {
         p.y += p.vy;
-        p.x += p.vx + Math.sin(timeSec * 0.8 + p.wobble) * 0.00012;
+        p.x += p.vx + Math.sin(timeSec * 0.8 + p.wobble) * 0.0001;
         if (p.y > 1.03) {
           p.y = -0.02;
           p.x = Math.random();
@@ -160,8 +137,8 @@
         if (p.x < -0.03) p.x = 1.02;
       }
 
-      const px = p.x * width + (pointerX - 0.5) * (p.depth * 22);
-      const py = p.y * height + (pointerY - 0.5) * (p.depth * 12);
+      const px = p.x * width + (pointerX - 0.5) * (p.depth * 20);
+      const py = p.y * height + (pointerY - 0.5) * (p.depth * 10);
 
       ctx.globalAlpha = theme === 'alpine-dark' ? p.alpha : p.alpha * 0.9;
       ctx.fillStyle = theme === 'alpine-dark' ? '#e0f2fe' : '#ffffff';
@@ -180,9 +157,8 @@
     }
   }
 
-  function setupSpotlights() {
+  function setupPointer() {
     let activeCard = null;
-
     document.addEventListener(
       'pointermove',
       (e) => {
@@ -203,13 +179,6 @@
       },
       { passive: true }
     );
-
-    document.addEventListener('pointerleave', () => {
-      if (activeCard) {
-        activeCard.style.setProperty('--spot-opacity', '0');
-        activeCard = null;
-      }
-    });
   }
 
   window.PeakFX = {
@@ -219,15 +188,12 @@
       ctx = canvas.getContext('2d');
       seedParticles();
       resize();
-      setupSpotlights();
+      setupPointer();
 
       window.addEventListener('resize', resize);
       document.addEventListener('visibilitychange', () => {
-        if (document.hidden) {
-          this.pause();
-        } else {
-          this.resume();
-        }
+        if (document.hidden) this.pause();
+        else this.resume();
       });
 
       this.resume();
@@ -249,11 +215,8 @@
       if (!canvas) return;
       paused = false;
       if (rafId) cancelAnimationFrame(rafId);
-      if (prefersReducedMotion) {
-        renderFrame(performance.now());
-      } else {
-        rafId = requestAnimationFrame(loop);
-      }
+      if (prefersReducedMotion) renderFrame(performance.now());
+      else rafId = requestAnimationFrame(loop);
     }
   };
 })();
