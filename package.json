@@ -1,7 +1,7 @@
 {
   "name": "peak-launcher",
   "productName": "Peak Launcher",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Nowoczesny launcher Minecraft z motywem Góry PEAK, łatwym dodawaniem modów, wszystkimi wersjami oraz automatyczną instalacją Javy i Fabrica.",
   "author": "Peak Launcher",
   "repository": "https://github.com/latajoncy82-svg/peak-launcher",
@@ -16,7 +16,8 @@
     "dist:dir": "electron-builder --win --dir"
   },
   "dependencies": {
-    "adm-zip": "^0.5.16"
+    "adm-zip": "^0.5.16",
+    "ssh2": "^1.17.0"
   },
   "devDependencies": {
     "electron": "^45.4.1",
@@ -25,6 +26,7 @@
   "build": {
     "appId": "com.peaklauncher.app",
     "productName": "Peak Launcher",
+    "npmRebuild": false,
     "directories": {
       "output": "dist"
     },
@@ -58,6 +60,8 @@
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,

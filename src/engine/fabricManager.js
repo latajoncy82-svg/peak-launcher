@@ -128,7 +128,7 @@ async function installFabric(mcVersion, loaderVersion = 'latest', dataDir, onPro
   ensureDir(versionDir);
 
   const jsonPath = path.join(versionDir, `${versionId}.json`);
-  fs.writeFileSync(jsonPath, JSON.stringify(profileJson, null, 2), 'utf8');
+  const tmpJsonPath = `${jsonPath}.tmp`;
 
   const libraries = Array.isArray(profileJson.libraries) ? profileJson.libraries : [];
   const tasks = libraries.map((lib) => {
@@ -157,6 +157,9 @@ async function installFabric(mcVersion, loaderVersion = 'latest', dataDir, onPro
       }
     });
   }
+
+  fs.writeFileSync(tmpJsonPath, JSON.stringify(profileJson, null, 2), 'utf8');
+  fs.renameSync(tmpJsonPath, jsonPath);
 
   if (onProgress) {
     onProgress({

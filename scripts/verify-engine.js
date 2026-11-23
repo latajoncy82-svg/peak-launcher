@@ -24,6 +24,7 @@ const {
   lookupPublicPeakDomain,
   unpublishPeakDomain
 } = require('../src/engine/peakDirectory');
+const { openPeakSshTunnel } = require('../src/engine/peakTunnel');
 const {
   PeakDomainRouter,
   readVarInt,
@@ -521,8 +522,12 @@ async function runVerification() {
     fs.writeFileSync(
       probeJavaPath,
       `import java.net.InetAddress;
+import java.net.URL;
+import java.net.URLClassLoader;
 public class PeakDnsProbe {
   public static void main(String[] args) throws Exception {
+    // Symulacja odizolowanego KnotClassLoader w Fabric Loader
+    Thread.currentThread().setContextClassLoader(new URLClassLoader(new URL[0], null));
     System.out.println("SZCZYT=" + InetAddress.getByName("szczyt.peak").getHostAddress());
     System.out.println("EKIPA=" + InetAddress.getByName("moja-ekipa.peak").getHostAddress());
     System.out.println("LOCAL=" + InetAddress.getByName("localhost").getHostAddress());
@@ -545,8 +550,6 @@ public class PeakDnsProbe {
     const probeSkinSrv = await startLocalSkinServer({ dataDir, accounts: store.getState().accounts });
     let testedJavaMajors = 0;
     try {
-      const cpSep = process.platform === 'win32' ? ';' : ':';
-      const probeCp = `${peakDnsJar}${cpSep}${probeDir}`;
       for (const major of [21, 25]) {
         const jInfo = await findJavaForMajor(major, dataDir);
         if (!jInfo) continue;
@@ -554,10 +557,11 @@ public class PeakDnsProbe {
         const { stdout: out } = await execFileAsync(
           jInfo.path,
           [
+            `-Xbootclasspath/a:${peakDnsJar}`,
             `-javaagent:${probeAuthlibJar}=${probeSkinSrv.apiUrl}`,
             '-Dauthlibinjector.side=client',
             '-cp',
-            probeCp,
+            probeDir,
             'PeakDnsProbe'
           ],
           { encoding: 'utf8', windowsHide: true, timeout: 15000 }
@@ -765,7 +769,7 @@ public class PeakDnsProbe {
     store.deletePeakRoute('kolega.peak');
     assert(!store.listPeakRoutes().some((r) => r.domain === 'kolega.peak'));
 
-    // 9d: buildLaunchSpec Java 18+ peak-dns.jar classpath + szczyt.peak quickPlay
+    // 9d: buildLaunchSpec Java 18+ -Xbootclasspath/a peak-dns.jar (bez wrzucania do -cp) + szczyt.peak quickPlay
     const qpPeakDomainSpec = buildLaunchSpec({
       profile: { id: 'qp-peak', name: 'QP Peak Domain', mcVersion: '1.21.4', loader: 'vanilla' },
       account,
@@ -777,15 +781,50 @@ public class PeakDnsProbe {
     });
     const cpIndexModern = qpPeakDomainSpec.args.indexOf('-cp');
     assert(cpIndexModern !== -1, 'Brak -cp dla 1.21.4');
-    assert(qpPeakDomainSpec.args[cpIndexModern + 1].includes('peak-dns.jar'), 'MC 1.21.4 (Java 21) musi wstrzykiwać peak-dns.jar do classpath');
+    assert(
+      !qpPeakDomainSpec.args[cpIndexModern + 1].includes('peak-dns.jar'),
+      'peak-dns.jar NIE może znajdować się w -cp (psuje Fabric KnotClassLoader)'
+    );
+    assert(
+      qpPeakDomainSpec.args.some((a) => a.startsWith('-Xbootclasspath/a:') && a.includes('peak-dns.jar')),
+      'MC 1.21.4 (Java 21) musi przekazywać peak-dns.jar przez -Xbootclasspath/a:'
+    );
     assert(
       qpPeakDomainSpec.args.includes('--quickPlayMultiplayer') && qpPeakDomainSpec.args.includes('szczyt.peak'),
       'Brak --quickPlayMultiplayer szczyt.peak'
     );
+    const fabricInstalled1214 = fs
+      .readdirSync(path.join(dataDir, 'versions'))
+      .find((d) => d.startsWith('fabric-loader-') && d.endsWith('-1.21.4'));
+    assert(fabricInstalled1214, 'Brak zainstalowanego profilu Fabric 1.21.4 w testach');
+    const fabricChild1214 = JSON.parse(
+      fs.readFileSync(path.join(dataDir, 'versions', fabricInstalled1214, `${fabricInstalled1214}.json`), 'utf8')
+    );
+    const fabricPeakSpec = buildLaunchSpec({
+      profile: { id: 'qp-fabric-peak', name: 'QP Fabric Peak', mcVersion: '1.21.4', loader: 'fabric' },
+      account,
+      settings,
+      dataDir,
+      javaPath: dummyJava,
+      parentJson: parent1214ForQp,
+      childJson: fabricChild1214,
+      quickPlayServer: 'szczyt.peak'
+    });
+    const fabCpIdx = fabricPeakSpec.args.indexOf('-cp');
+    assert(fabCpIdx !== -1 && !fabricPeakSpec.args[fabCpIdx + 1].includes('peak-dns.jar'), 'Fabric -cp nie może zawierać peak-dns.jar');
+    assert(
+      fabricPeakSpec.args.some((a) => a.startsWith('-Xbootclasspath/a:') && a.includes('peak-dns.jar')),
+      'Fabric 1.21.4 musi mieć -Xbootclasspath/a:...peak-dns.jar'
+    );
+
     const cpIndexLegacy = qpLegacy.args.indexOf('-cp');
     assert(
       cpIndexLegacy !== -1 && !qpLegacy.args[cpIndexLegacy + 1].includes('peak-dns.jar'),
       'MC 1.12.2 (Java 8) nie może ładować klas Java 18 peak-dns.jar'
+    );
+    assert(
+      !qpLegacy.args.some((a) => a.includes('peak-dns.jar')),
+      'MC 1.12.2 (Java 8) nie może dostawać flagi -Xbootclasspath/a dla peak-dns.jar'
     );
 
     // 9e: Global public .peak Directory + SSRF + async PeakDomainRouter + live ntfy.sh round-trip
@@ -940,7 +979,54 @@ public class PeakDnsProbe {
       await new Promise((r) => mockDirHttp.close(r));
     }
 
-    console.log(`   -> Domena .peak DNS SPI (Java majors: ${testedJavaMajors}) + authlib-injector + PeakDomainRouter + globalny katalog OK.`);
+    // 9f: Wbudowany tunel pure-JS ssh2 (bez ssh.exe i bez admina) — prawdziwy round-trip TCP
+    const tunnelEchoServer = net.createServer((sock) => {
+      sock.on('data', (chunk) => {
+        if (chunk.toString('utf8').includes('PING_PEAK')) {
+          sock.write(Buffer.from('PEAK_TUNNEL_ECHO_OK'));
+        }
+      });
+    });
+    await new Promise((resolve) => tunnelEchoServer.listen(0, '127.0.0.1', resolve));
+    const echoPort = tunnelEchoServer.address().port;
+    let tunHandle = null;
+    try {
+      tunHandle = await openPeakSshTunnel({
+        getTargetPort: () => echoPort
+      });
+      assert.strictEqual(tunHandle.transport, 'ssh2', `Oczekiwano wbudowanego transportu ssh2, otrzymano: ${tunHandle.transport}`);
+      const colonIdx = tunHandle.rawAddress.lastIndexOf(':');
+      assert(colonIdx > 0, `Nieprawidłowy adres tunelu: ${tunHandle.rawAddress}`);
+      const tunHost = tunHandle.rawAddress.slice(0, colonIdx);
+      const tunPort = Number(tunHandle.rawAddress.slice(colonIdx + 1));
+
+      await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          sock.destroy();
+          reject(new Error('Timeout live echo przez publiczny tunel ssh2 Pinggy'));
+        }, 10000);
+        const sock = net.createConnection({ host: tunHost, port: tunPort }, () => {
+          sock.write(Buffer.from('PING_PEAK'));
+        });
+        sock.on('data', (chunk) => {
+          if (chunk.toString('utf8').includes('PEAK_TUNNEL_ECHO_OK')) {
+            clearTimeout(timer);
+            sock.destroy();
+            resolve();
+          }
+        });
+        sock.on('error', (err) => {
+          clearTimeout(timer);
+          reject(err);
+        });
+      });
+      console.log(`   -> Tunel pure-JS ssh2 OK (${tunHandle.rawAddress} -> loopback:${echoPort}).`);
+    } finally {
+      if (tunHandle) tunHandle.close();
+      await new Promise((resolve) => tunnelEchoServer.close(resolve));
+    }
+
+    console.log(`   -> Domena .peak -Xbootclasspath/a DNS SPI (Java majors: ${testedJavaMajors}) + Fabric TCCL + tunel ssh2 + globalny katalog OK.`);
 
     console.log('\nWSZYSTKIE TESTY SILNIKA ZAKOŃCZONE SUKCESEM!');
   } finally {

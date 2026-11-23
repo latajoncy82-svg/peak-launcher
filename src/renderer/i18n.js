@@ -376,7 +376,8 @@
       toast_route_saved: 'Zapisano trasę {domain} -> {target}.',
       toast_route_deleted: 'Usunięto trasę {domain}.',
       addr_tunnel_peak_live: 'Globalna domena .peak · aktywna',
-      hshare_raw_tcp_label: 'Bezpośredni TCP (bez Peak Launchera):'
+      hshare_raw_tcp_label: 'Bezpośredni TCP (bez Peak Launchera):',
+      confirm_auto_eula: 'Aby uruchomić serwer Minecraft, wymagana jest akceptacja umowy Mojang EULA (aka.ms/MinecraftEULA). Czy akceptujesz EULA i chcesz uruchomić serwer teraz?'
     },
     en: {
       nav_play: 'Play',
@@ -745,7 +746,8 @@
       toast_route_saved: 'Saved route {domain} -> {target}.',
       toast_route_deleted: 'Removed route {domain}.',
       addr_tunnel_peak_live: 'Global .peak domain · live',
-      hshare_raw_tcp_label: 'Direct TCP (non-Peak Launcher):'
+      hshare_raw_tcp_label: 'Direct TCP (non-Peak Launcher):',
+      confirm_auto_eula: 'Minecraft server startup requires accepting the Mojang EULA (aka.ms/MinecraftEULA). Accept EULA and start the server now?'
     },
     de: {
       nav_play: 'Spielen',
@@ -1114,7 +1116,8 @@
       toast_route_saved: 'Route {domain} -> {target} gespeichert.',
       toast_route_deleted: 'Route {domain} entfernt.',
       addr_tunnel_peak_live: 'Globale .peak-Domain · aktiv',
-      hshare_raw_tcp_label: 'Direktes TCP (ohne Peak Launcher):'
+      hshare_raw_tcp_label: 'Direktes TCP (ohne Peak Launcher):',
+      confirm_auto_eula: 'Zum Starten des Minecraft-Servers ist die Zustimmung zur Mojang EULA (aka.ms/MinecraftEULA) erforderlich. EULA akzeptieren und Server jetzt starten?'
     },
     es: {
       nav_play: 'Jugar',
@@ -1483,7 +1486,8 @@
       toast_route_saved: 'Ruta guardada: {domain} -> {target}.',
       toast_route_deleted: 'Ruta eliminada: {domain}.',
       addr_tunnel_peak_live: 'Dominio global .peak · activo',
-      hshare_raw_tcp_label: 'TCP directo (sin Peak Launcher):'
+      hshare_raw_tcp_label: 'TCP directo (sin Peak Launcher):',
+      confirm_auto_eula: 'Para iniciar el servidor de Minecraft debes aceptar el EULA de Mojang (aka.ms/MinecraftEULA). ¿Aceptar el EULA e iniciar ahora?'
     },
     fr: {
       nav_play: 'Jouer',
@@ -1852,7 +1856,8 @@
       toast_route_saved: 'Route enregistrée : {domain} -> {target}.',
       toast_route_deleted: 'Route supprimée : {domain}.',
       addr_tunnel_peak_live: 'Domaine global .peak · actif',
-      hshare_raw_tcp_label: 'TCP direct (hors Peak Launcher) :'
+      hshare_raw_tcp_label: 'TCP direct (hors Peak Launcher) :',
+      confirm_auto_eula: 'Pour démarrer le serveur Minecraft, vous devez accepter le CLUF Mojang (aka.ms/MinecraftEULA). Accepter le CLUF et démarrer maintenant ?'
     },
     uk: {
       nav_play: 'Грати',
@@ -2221,7 +2226,8 @@
       toast_route_saved: 'Маршрут збережено: {domain} -> {target}.',
       toast_route_deleted: 'Маршрут видалено: {domain}.',
       addr_tunnel_peak_live: 'Глобальний домен .peak · активний',
-      hshare_raw_tcp_label: 'Прямий TCP (без Peak Launcher):'
+      hshare_raw_tcp_label: 'Прямий TCP (без Peak Launcher):',
+      confirm_auto_eula: 'Для запуску сервера Minecraft потрібно прийняти ліцензійну угоду Mojang EULA (aka.ms/MinecraftEULA). Прийняти EULA та запустити сервер зараз?'
     }
   };
 

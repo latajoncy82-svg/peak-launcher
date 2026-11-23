@@ -134,7 +134,7 @@ async function lookupPublicPeakDomain(
     const res = await fetch(`${cleanBase}/${topic}/json?poll=1&since=all`, {
       method: 'GET',
       headers: {
-        'User-Agent': 'PeakLauncher/1.5.1'
+        'User-Agent': 'PeakLauncher/1.5.2'
       },
       signal: AbortSignal.timeout(timeoutMs)
     });
@@ -210,7 +210,7 @@ async function publishPeakRecord(record, { baseUrl, timeoutMs = 5000 } = {}) {
     headers: {
       'Content-Type': 'text/plain',
       Cache: 'yes',
-      'User-Agent': 'PeakLauncher/1.5.1'
+      'User-Agent': 'PeakLauncher/1.5.2'
     },
     body: payload,
     signal: AbortSignal.timeout(timeoutMs)

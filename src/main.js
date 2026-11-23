@@ -776,6 +776,7 @@ function registerIpcHandlers() {
     return startPublicTunnel({
       server,
       ownerId: store.getPeakOwnerId(),
+      routerPort: peakRouter.getStatus().port || 25565,
       onStatus: (s) => sendToRenderer('hosting:status', s),
       onLog: (entry) => sendToRenderer('hosting:log', entry),
       onTunnel: (t) => sendToRenderer('hosting:tunnel', t)
@@ -1283,7 +1284,7 @@ app.whenReady().then(async () => {
   peakRouter.on('status', (st) => sendToRenderer('hosting:routerStatus', st));
   peakRouter.setRemoteResolver((domain) => lookupPublicPeakDomain(domain));
   syncPeakRouterRoutes();
-  await peakRouter.start(25565, '0.0.0.0');
+  await peakRouter.start(25565, '127.0.0.1');
   registerIpcHandlers();
   createWindow();
 

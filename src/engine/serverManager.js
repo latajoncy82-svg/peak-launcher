@@ -13,6 +13,7 @@ const {
   publishPeakRecord,
   unpublishPeakDomain
 } = require('./peakDirectory');
+const { openPeakSshTunnel } = require('./peakTunnel');
 const { ensureVersionJson, estimateJavaMajor } = require('./versions');
 
 const MAX_LOG_LINES = 600;
@@ -43,8 +44,11 @@ function getOrCreateRuntime(serverId) {
         registryActive: false,
         provider: '',
         note: '',
-        process: null,
+        handle: null,
         heartbeatTimer: null,
+        reconnectTimer: null,
+        reconnectAttempts: 0,
+        manualStop: false,
         ownerId: ''
       }
     };
@@ -426,11 +430,8 @@ async function startServer({
   }
 
   let resolvedBindPort = logicalPort;
-  let resolvedBindHost = '';
-  if (routerListeningOn25565 && logicalPort === 25565) {
-    resolvedBindPort = await findFreeLoopbackPort(25600, usedBindPorts);
-    resolvedBindHost = '127.0.0.1';
-  } else if (usedBindPorts.has(logicalPort)) {
+  let resolvedBindHost = server.allowLan === true && logicalPort !== 25565 ? '' : '127.0.0.1';
+  if ((routerListeningOn25565 && logicalPort === 25565) || usedBindPorts.has(logicalPort)) {
     resolvedBindPort = await findFreeLoopbackPort(25600, usedBindPorts);
     resolvedBindHost = '127.0.0.1';
   }
@@ -657,15 +658,21 @@ async function restartServer({
 
 function stopPublicTunnel(serverId, { onStatus = null, onLog = null } = {}) {
   const rt = getOrCreateRuntime(serverId);
-  const hadTunnel = Boolean(rt.tunnel.active || rt.tunnel.connecting || rt.tunnel.process);
+  const hadTunnel = Boolean(
+    rt.tunnel.active || rt.tunnel.connecting || rt.tunnel.handle || rt.tunnel.reconnectTimer
+  );
   const prevPublicDomain = rt.tunnel.registryActive ? rt.tunnel.publicDomain : '';
   const prevOwnerId = rt.tunnel.ownerId || '';
+  rt.tunnel.manualStop = true;
   if (rt.tunnel.heartbeatTimer) {
     clearInterval(rt.tunnel.heartbeatTimer);
   }
-  if (rt.tunnel.process) {
+  if (rt.tunnel.reconnectTimer) {
+    clearTimeout(rt.tunnel.reconnectTimer);
+  }
+  if (rt.tunnel.handle) {
     try {
-      rt.tunnel.process.kill();
+      rt.tunnel.handle.close();
     } catch {
       // Ignore
     }
@@ -679,8 +686,11 @@ function stopPublicTunnel(serverId, { onStatus = null, onLog = null } = {}) {
     registryActive: false,
     provider: '',
     note: '',
-    process: null,
+    handle: null,
     heartbeatTimer: null,
+    reconnectTimer: null,
+    reconnectAttempts: 0,
+    manualStop: true,
     ownerId: ''
   };
   if (prevPublicDomain) {
@@ -696,6 +706,7 @@ function stopPublicTunnel(serverId, { onStatus = null, onLog = null } = {}) {
 async function startPublicTunnel({
   server,
   ownerId = '',
+  routerPort = 25565,
   onStatus = null,
   onLog = null,
   onTunnel = null
@@ -705,165 +716,151 @@ async function startPublicTunnel({
     return serializeRuntimeStatus(rt).tunnel;
   }
   stopPublicTunnel(server.id);
+  rt.tunnel.manualStop = false;
+  rt.tunnel.reconnectAttempts = 0;
 
-  const port = Number(rt.bindPort || server.port) || 25565;
-  rt.tunnel.connecting = true;
-  if (onStatus) onStatus(serializeRuntimeStatus(rt));
-  appendServerLog(rt, 'SYSTEM', `Otwieranie darmowego tunelu publicznego TCP dla portu ${port}...`, onLog);
-
-  return new Promise((resolve, reject) => {
-    let resolved = false;
-    const child = spawn(
-      'ssh',
-      [
-        '-p',
-        '443',
-        '-o',
-        'StrictHostKeyChecking=no',
-        '-o',
-        'UserKnownHostsFile=NUL',
-        '-o',
-        'ServerAliveInterval=30',
-        '-o',
-        'ExitOnForwardFailure=yes',
-        '-o',
-        'ConnectTimeout=10',
-        '-T',
-        `-R0:127.0.0.1:${port}`,
-        'tcp@free.pinggy.io'
-      ],
-      {
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe']
-      }
+  const openAndRegister = async () => {
+    rt.tunnel.connecting = true;
+    if (onStatus) onStatus(serializeRuntimeStatus(rt));
+    appendServerLog(
+      rt,
+      'SYSTEM',
+      'Otwieranie szyfrowanego tunelu publicznego (port 443 · bez uprawnień administratora)...',
+      onLog
     );
 
-    rt.tunnel.process = child;
-    let combined = '';
+    const handle = await openPeakSshTunnel({
+      getTargetPort: () => (rt.state !== 'offline' ? (rt.bindPort || server.port) : (routerPort || 25565)),
+      onLog: (lvl, msg) => appendServerLog(rt, lvl, msg, onLog),
+      onClose: (reason) => {
+        if (rt.tunnel.handle !== handle) return;
+        if (rt.tunnel.heartbeatTimer) {
+          clearInterval(rt.tunnel.heartbeatTimer);
+          rt.tunnel.heartbeatTimer = null;
+        }
+        const prevDomain = rt.tunnel.registryActive ? rt.tunnel.publicDomain : '';
+        const prevOwner = rt.tunnel.ownerId || ownerId;
+        rt.tunnel.handle = null;
+        rt.tunnel.active = false;
 
-    const fail = (message) => {
-      if (resolved) return;
-      resolved = true;
-      stopPublicTunnel(server.id, { onStatus, onLog });
-      reject(new Error(message));
-    };
-
-    const timer = setTimeout(() => {
-      fail('Przekroczono czas oczekiwania na tunel publiczny TCP (sprawdź połączenie lub zaporę Windows).');
-    }, 14000);
-
-    const inspectOutput = (chunk) => {
-      const txt = chunk.toString('utf8');
-      combined += txt;
-      const match = combined.match(/tcp:\/\/([a-zA-Z0-9.-]+:\d+)/);
-      if (match && match[1] && !resolved) {
-        resolved = true;
-        clearTimeout(timer);
-        const rawAddr = match[1];
-        void (async () => {
-          let publicDomain = server.peakDomain || '';
-          let registryActive = false;
-          let claimedRecord = null;
-          try {
-            const pub = await claimAndPublishPeakDomain({
-              domain: server.peakDomain,
-              slug: server.slug,
-              rawAddress: rawAddr,
-              serverName: server.name,
-              mcVersion: server.mcVersion,
-              loader: server.loader,
-              ownerId
-            });
-            publicDomain = pub.domain;
-            registryActive = Boolean(pub.registryActive);
-            claimedRecord = pub.record;
-          } catch {
-            registryActive = false;
-          }
-
-          if (rt.tunnel.process !== child) {
-            if (registryActive && publicDomain) {
-              unpublishPeakDomain({ domain: publicDomain, ownerId }).catch(() => {});
-            }
-            return;
-          }
-
-          rt.tunnel.connecting = false;
-          rt.tunnel.active = true;
-          rt.tunnel.rawAddress = rawAddr;
-          rt.tunnel.publicDomain = registryActive ? publicDomain : '';
-          rt.tunnel.address = registryActive ? publicDomain : rawAddr;
-          rt.tunnel.registryActive = registryActive;
-          rt.tunnel.ownerId = ownerId;
-          rt.tunnel.provider = registryActive ? 'Peak Global .peak' : 'Pinggy Free TCP';
-          rt.tunnel.note = registryActive
-            ? `Publiczna domena .peak aktywna (relay TCP: ${rawAddr})`
-            : 'Sesja darmowa ~60 min (po wygaśnięciu kliknij ponownie)';
-
-          if (registryActive && claimedRecord) {
-            if (rt.tunnel.heartbeatTimer) clearInterval(rt.tunnel.heartbeatTimer);
-            const hb = setInterval(() => {
-              if (!rt.tunnel.active || rt.tunnel.process !== child) return;
-              publishPeakRecord({ ...claimedRecord, ts: Date.now() }).catch(() => {});
-            }, 8 * 60 * 1000);
-            if (typeof hb.unref === 'function') hb.unref();
-            rt.tunnel.heartbeatTimer = hb;
-            appendServerLog(
-              rt,
-              'SYSTEM',
-              `Publiczna domena .peak aktywna: ${publicDomain} (relay: ${rawAddr})`,
-              onLog
-            );
-          } else {
-            appendServerLog(rt, 'SYSTEM', `Publiczny adres tunelu gotowy: ${rawAddr}`, onLog);
-          }
-
+        if (!rt.tunnel.manualStop && rt.tunnel.reconnectAttempts < 5) {
+          rt.tunnel.reconnectAttempts += 1;
+          rt.tunnel.connecting = true;
+          const attempt = rt.tunnel.reconnectAttempts;
+          appendServerLog(
+            rt,
+            'WARN',
+            `Sesja tunelu rozłączona (${reason}) — automatyczne odnawianie (${attempt}/5)...`,
+            onLog
+          );
           const payload = serializeRuntimeStatus(rt);
           if (onTunnel) onTunnel({ serverId: server.id, tunnel: payload.tunnel });
           if (onStatus) onStatus(payload);
-          resolve(payload.tunnel);
-        })();
-      }
-    };
 
-    child.stdout.on('data', inspectOutput);
-    child.stderr.on('data', inspectOutput);
-
-    child.on('error', (err) => {
-      clearTimeout(timer);
-      if (!resolved) {
-        fail(
-          err.code === 'ENOENT'
-            ? 'Nie znaleziono klienta SSH w systemie Windows (OpenSSH Client).'
-            : `Nie udało się uruchomić tunelu: ${err.message}`
-        );
-      }
-    });
-
-    child.on('exit', () => {
-      clearTimeout(timer);
-      if (!resolved) {
-        fail('Tunel publiczny został zamknięty przed przydzieleniem adresu.');
-      } else if (rt.tunnel.active) {
-        if (rt.tunnel.heartbeatTimer) clearInterval(rt.tunnel.heartbeatTimer);
-        if (rt.tunnel.registryActive && rt.tunnel.publicDomain) {
-          unpublishPeakDomain({ domain: rt.tunnel.publicDomain, ownerId: rt.tunnel.ownerId }).catch(() => {});
+          rt.tunnel.reconnectTimer = setTimeout(() => {
+            rt.tunnel.reconnectTimer = null;
+            if (rt.tunnel.manualStop) return;
+            openAndRegister().catch((err) => {
+              appendServerLog(rt, 'ERROR', `Nie udało się odnowić tunelu: ${err.message}`, onLog);
+              stopPublicTunnel(server.id, { onStatus, onLog });
+            });
+          }, 3000);
+          return;
         }
-        rt.tunnel.active = false;
+
+        if (prevDomain) {
+          unpublishPeakDomain({ domain: prevDomain, ownerId: prevOwner }).catch(() => {});
+        }
         rt.tunnel.connecting = false;
         rt.tunnel.address = '';
         rt.tunnel.publicDomain = '';
         rt.tunnel.rawAddress = '';
         rt.tunnel.registryActive = false;
-        rt.tunnel.heartbeatTimer = null;
-        rt.tunnel.process = null;
-        appendServerLog(rt, 'WARN', 'Sesja tunelu publicznego zakończyła się.', onLog);
+        appendServerLog(rt, 'WARN', `Sesja tunelu publicznego zakończyła się (${reason}).`, onLog);
         const payload = serializeRuntimeStatus(rt);
         if (onTunnel) onTunnel({ serverId: server.id, tunnel: payload.tunnel });
         if (onStatus) onStatus(payload);
       }
     });
-  });
+
+    if (rt.tunnel.manualStop) {
+      handle.close();
+      return serializeRuntimeStatus(rt).tunnel;
+    }
+
+    rt.tunnel.handle = handle;
+    const rawAddr = handle.rawAddress;
+    let publicDomain = server.peakDomain || '';
+    let registryActive = false;
+    let claimedRecord = null;
+    try {
+      const pub = await claimAndPublishPeakDomain({
+        domain: server.peakDomain,
+        slug: server.slug,
+        rawAddress: rawAddr,
+        serverName: server.name,
+        mcVersion: server.mcVersion,
+        loader: server.loader,
+        ownerId
+      });
+      publicDomain = pub.domain;
+      registryActive = Boolean(pub.registryActive);
+      claimedRecord = pub.record;
+    } catch {
+      registryActive = false;
+    }
+
+    if (rt.tunnel.manualStop || rt.tunnel.handle !== handle) {
+      handle.close();
+      if (registryActive && publicDomain) {
+        unpublishPeakDomain({ domain: publicDomain, ownerId }).catch(() => {});
+      }
+      return serializeRuntimeStatus(rt).tunnel;
+    }
+
+    rt.tunnel.connecting = false;
+    rt.tunnel.active = true;
+    rt.tunnel.reconnectAttempts = 0;
+    rt.tunnel.rawAddress = rawAddr;
+    rt.tunnel.publicDomain = registryActive ? publicDomain : '';
+    rt.tunnel.address = registryActive ? publicDomain : rawAddr;
+    rt.tunnel.registryActive = registryActive;
+    rt.tunnel.ownerId = ownerId;
+    rt.tunnel.provider = registryActive ? 'Peak Global .peak' : handle.provider;
+    rt.tunnel.note = registryActive
+      ? `Publiczna domena .peak aktywna (relay TCP: ${rawAddr})`
+      : 'Sesja darmowa ~60 min (po wygaśnięciu kliknij ponownie)';
+
+    if (registryActive && claimedRecord) {
+      if (rt.tunnel.heartbeatTimer) clearInterval(rt.tunnel.heartbeatTimer);
+      const hb = setInterval(() => {
+        if (!rt.tunnel.active || rt.tunnel.handle !== handle) return;
+        publishPeakRecord({ ...claimedRecord, ts: Date.now() }).catch(() => {});
+      }, 8 * 60 * 1000);
+      if (typeof hb.unref === 'function') hb.unref();
+      rt.tunnel.heartbeatTimer = hb;
+      appendServerLog(
+        rt,
+        'SYSTEM',
+        `Publiczna domena .peak aktywna: ${publicDomain} (relay: ${rawAddr})`,
+        onLog
+      );
+    } else {
+      appendServerLog(rt, 'SYSTEM', `Publiczny adres tunelu gotowy: ${rawAddr}`, onLog);
+    }
+
+    const payload = serializeRuntimeStatus(rt);
+    if (onTunnel) onTunnel({ serverId: server.id, tunnel: payload.tunnel });
+    if (onStatus) onStatus(payload);
+    return payload.tunnel;
+  };
+
+  try {
+    return await openAndRegister();
+  } catch (err) {
+    stopPublicTunnel(server.id, { onStatus, onLog });
+    throw err;
+  }
 }
 
 async function stopAllServers() {

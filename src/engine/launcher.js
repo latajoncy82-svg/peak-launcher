@@ -248,12 +248,6 @@ function buildLaunchSpec({
   const classpathEntries = [];
   const seenCp = new Set();
 
-  if (peakDnsJarPath) {
-    const dnsKey = peakDnsJarPath.toLowerCase();
-    seenCp.add(dnsKey);
-    classpathEntries.push(peakDnsJarPath);
-  }
-
   for (const lib of merged.libraries || []) {
     if (!evaluateRules(lib.rules)) continue;
     const resolvedItems = resolveLibraryDownload(lib, paths.librariesDir);
@@ -313,7 +307,7 @@ function buildLaunchSpec({
     classpath_separator: path.delimiter,
     classpath,
     launcher_name: 'PeakLauncher',
-    launcher_version: '1.5.1',
+    launcher_version: '1.5.2',
     resolution_width: String(settings.width || 1280),
     resolution_height: String(settings.height || 720)
   };
@@ -336,7 +330,7 @@ function buildLaunchSpec({
     jvmArgs = [
       `-Djava.library.path=${nativesDir}`,
       `-Dminecraft.launcher.brand=PeakLauncher`,
-      `-Dminecraft.launcher.version=1.5.1`,
+      `-Dminecraft.launcher.version=1.5.2`,
       '-cp',
       classpath
     ];
@@ -379,9 +373,12 @@ function buildLaunchSpec({
       ]
     : [];
 
+  const peakDnsJvmArgs = peakDnsJarPath ? [`-Xbootclasspath/a:${peakDnsJarPath}`] : [];
+
   const allArgs = [
     ...baseMemoryArgs,
     ...userJvmArgs,
+    ...peakDnsJvmArgs,
     ...jvmArgs,
     ...skinJvmArgs,
     merged.mainClass,

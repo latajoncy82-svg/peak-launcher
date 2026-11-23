@@ -174,26 +174,36 @@ async function detectInstalledJavas(dataDir) {
   return { list: valid, byMajor };
 }
 
+function normalizeAdoptiumMajor(major) {
+  const m = Number(major) || 8;
+  if (m <= 8) return 8;
+  if (m <= 11) return 11;
+  if (m <= 17) return 17;
+  if (m <= 21) return 21;
+  return 25;
+}
+
 async function findJavaForMajor(major, dataDir) {
   const targetMajor = Number(major) || 8;
+  const fallbackMajor = normalizeAdoptiumMajor(targetMajor);
   const { runtimesDir } = getPaths(dataDir);
-  const managedExe = path.join(runtimesDir, `java-${targetMajor}`, 'bin', 'java.exe');
-  if (fs.existsSync(managedExe)) {
-    const probed = await probeJavaBinary(managedExe, 'managed');
-    if (probed && probed.major === targetMajor) {
-      return probed;
+
+  for (const cand of [targetMajor, fallbackMajor]) {
+    const managedExe = path.join(runtimesDir, `java-${cand}`, 'bin', 'java.exe');
+    if (fs.existsSync(managedExe)) {
+      const probed = await probeJavaBinary(managedExe, 'managed');
+      if (probed && (probed.major === targetMajor || probed.major === fallbackMajor)) {
+        return probed;
+      }
     }
   }
 
   const detected = await detectInstalledJavas(dataDir);
-  return detected.byMajor[targetMajor] || null;
+  return detected.byMajor[targetMajor] || detected.byMajor[fallbackMajor] || null;
 }
 
 async function getAdoptiumReleaseInfo(major) {
-  const m = Number(major);
-  if (![8, 11, 17, 21, 25].includes(m)) {
-    throw new Error(`Nieobsługiwana wersja Java: ${major}`);
-  }
+  const m = normalizeAdoptiumMajor(major);
   const url = `https://api.adoptium.net/v3/assets/latest/${m}/hotspot?os=windows&architecture=x64&image_type=jre`;
   const data = await fetchJson(url);
   const asset = Array.isArray(data) ? data[0] : null;
@@ -212,7 +222,7 @@ async function getAdoptiumReleaseInfo(major) {
 }
 
 async function installJava(major, dataDir, onProgress = null) {
-  const m = Number(major);
+  const m = normalizeAdoptiumMajor(major);
   const { runtimesDir, tmpDir } = getPaths(dataDir);
   ensureDir(runtimesDir);
   ensureDir(tmpDir);
