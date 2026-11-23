@@ -371,6 +371,7 @@ module.exports = {
   PRESET_SKINS,
   validateMinecraftSkinPng,
   saveBufferToLibrary,
+  writeAccountSkinBuffer,
   setAccountSkinFromFile,
   setAccountSkinFromUsername,
   setAccountSkinFromPreset,

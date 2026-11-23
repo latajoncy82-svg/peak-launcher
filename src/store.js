@@ -270,6 +270,9 @@ class Store {
     if (id) {
       const existing = this.data.accounts.find((a) => a.id === id);
       if (existing) {
+        if (existing.type === 'microsoft') {
+          throw new Error('Nick konta Premium Microsoft jest zarządzany na minecraft.net.');
+        }
         const conflict = this.data.accounts.find(
           (a) => a.id !== id && a.username.toLowerCase() === cleanName.toLowerCase()
         );
@@ -286,7 +289,7 @@ class Store {
     }
 
     const byName = this.data.accounts.find(
-      (a) => a.username.toLowerCase() === cleanName.toLowerCase()
+      (a) => a.type !== 'microsoft' && a.username.toLowerCase() === cleanName.toLowerCase()
     );
     if (byName) {
       byName.lastUsedAt = now;
@@ -307,6 +310,87 @@ class Store {
     this.data.activeAccountId = account.id;
     this.save();
     return account;
+  }
+
+  saveMicrosoftAccount({
+    uuid,
+    username,
+    xuid = '',
+    mcAccessTokenEnc = '',
+    msRefreshTokenEnc = '',
+    mcTokenExpiresAt = null,
+    skinFile = null,
+    skinModel = 'classic',
+    skinSource = null
+  }) {
+    const cleanUuid = String(uuid || '').trim().toLowerCase();
+    const cleanName = String(username || '').trim();
+    if (!cleanUuid || !cleanName) {
+      throw new Error('Nieprawidłowe dane konta Premium Microsoft.');
+    }
+
+    const now = new Date().toISOString();
+    const existing = this.data.accounts.find(
+      (a) => a.type === 'microsoft' && String(a.uuid || '').toLowerCase() === cleanUuid
+    );
+
+    if (existing) {
+      existing.username = cleanName;
+      existing.uuid = cleanUuid;
+      existing.xuid = String(xuid || existing.xuid || '');
+      if (mcAccessTokenEnc) existing.mcAccessTokenEnc = mcAccessTokenEnc;
+      if (msRefreshTokenEnc) existing.msRefreshTokenEnc = msRefreshTokenEnc;
+      if (mcTokenExpiresAt !== null && mcTokenExpiresAt !== undefined) {
+        existing.mcTokenExpiresAt = mcTokenExpiresAt;
+      }
+      if (skinFile !== null && skinFile !== undefined) existing.skinFile = skinFile;
+      if (skinModel) existing.skinModel = skinModel === 'slim' ? 'slim' : 'classic';
+      if (skinSource !== null && skinSource !== undefined) existing.skinSource = skinSource;
+      existing.lastUsedAt = now;
+      this.data.activeAccountId = existing.id;
+      this.save();
+      return existing;
+    }
+
+    let accId = `acc-ms-${cleanUuid.replace(/-/g, '').slice(0, 8)}`;
+    while (this.data.accounts.some((a) => a.id === accId)) {
+      accId = `acc-ms-${crypto.randomBytes(4).toString('hex')}`;
+    }
+
+    const account = {
+      id: accId,
+      username: cleanName,
+      uuid: cleanUuid,
+      type: 'microsoft',
+      xuid: String(xuid || ''),
+      mcAccessTokenEnc: String(mcAccessTokenEnc || ''),
+      msRefreshTokenEnc: String(msRefreshTokenEnc || ''),
+      mcTokenExpiresAt: mcTokenExpiresAt || null,
+      skinFile: skinFile || null,
+      skinModel: skinModel === 'slim' ? 'slim' : 'classic',
+      skinSource: skinSource || null,
+      createdAt: now,
+      lastUsedAt: now
+    };
+    this.data.accounts.push(account);
+    this.data.activeAccountId = account.id;
+    this.save();
+    return account;
+  }
+
+  updateMicrosoftTokens(accountId, patch = {}) {
+    const acc = this.data.accounts.find((a) => a.id === accountId && a.type === 'microsoft');
+    if (!acc) {
+      throw new Error('Nie znaleziono konta Premium Microsoft.');
+    }
+    if (patch.username) acc.username = String(patch.username).trim();
+    if (patch.xuid !== undefined) acc.xuid = String(patch.xuid || '');
+    if (patch.mcAccessTokenEnc) acc.mcAccessTokenEnc = patch.mcAccessTokenEnc;
+    if (patch.msRefreshTokenEnc) acc.msRefreshTokenEnc = patch.msRefreshTokenEnc;
+    if (patch.mcTokenExpiresAt !== undefined) acc.mcTokenExpiresAt = patch.mcTokenExpiresAt;
+    acc.lastUsedAt = new Date().toISOString();
+    this.save();
+    return acc;
   }
 
   selectAccount(accountId) {

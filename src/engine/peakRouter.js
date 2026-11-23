@@ -247,13 +247,25 @@ class PeakDomainRouter extends EventEmitter {
   }
 
   async start(port = 25565, host = '0.0.0.0') {
-    if (this.server && this.listening && this.listenPort === port && this.listenHost === host) {
+    const requestedPort =
+      port === undefined || port === null || port === ''
+        ? 25565
+        : Number(port) === 0
+          ? 0
+          : (Number(port) > 0 && Number.isFinite(Number(port)) ? Number(port) : 25565);
+    const requestedHost = host || '0.0.0.0';
+    if (
+      this.server &&
+      this.listening &&
+      this.listenPort === requestedPort &&
+      this.listenHost === requestedHost
+    ) {
       return this.getStatus();
     }
     await this.stop();
 
-    this.listenPort = Number(port) || 25565;
-    this.listenHost = host || '0.0.0.0';
+    this.listenPort = requestedPort;
+    this.listenHost = requestedHost;
     this.error = null;
 
     return new Promise((resolve) => {

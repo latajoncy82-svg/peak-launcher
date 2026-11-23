@@ -1,5 +1,27 @@
 [
   {
+    "tag": "v1.6.0",
+    "name": "Peak Launcher 1.6.0 — Konta Premium Microsoft (Minecraft) i Synchronizacja Skinów",
+    "publishedAt": "2026-11-23T20:20:00Z",
+    "body": "### Najważniejsze nowości w wersji 1.6.0\n- **Logowanie kontem Microsoft (Premium)**: dedykowane okno logowania OAuth2 (`login.live.com`) + pełny łańcuch autoryzacji Xbox Live (`XBL` + `XSTS`) i `api.minecraftservices.com`.\n- **Gra na oficjalnych serwerach Premium (Hypixel, Realms)**: tokeny szyfrowane lokalnie przez Windows DPAPI (`safeStorage`), automatyczne odświeżanie wygasłej sesji przy starcie gry oraz automatyczne pomijanie `authlib-injector` dla kont Microsoft.\n- **Synchronizacja skina z minecraft.net**: pobranie aktualnego skina przy logowaniu i automatyczna wysyłka zmian z Studia Skinów 3D na oficjalny profil Mojang.",
+    "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.6.0",
+    "prerelease": false,
+    "assets": {
+      "installer": {
+        "name": "Peak-Launcher-Setup-1.6.0.exe",
+        "size": 123617708,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.6.0/Peak-Launcher-Setup-1.6.0.exe",
+        "downloadCount": 0
+      },
+      "portable": {
+        "name": "Peak-Launcher-Portable-1.6.0.exe",
+        "size": 112267387,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.6.0/Peak-Launcher-Portable-1.6.0.exe",
+        "downloadCount": 0
+      }
+    }
+  },
+  {
     "tag": "v1.5.2",
     "name": "Peak Launcher 1.5.2 — Naprawiony Fabric, Wbudowany Tunel SSH2 i Praca na Czystym PC",
     "publishedAt": "2026-11-23T17:50:00Z",

@@ -70,6 +70,7 @@ const {
   stopGame
 } = require('./engine/launcher');
 const {
+  writeAccountSkinBuffer,
   setAccountSkinFromFile,
   setAccountSkinFromUsername,
   setAccountSkinFromPreset,
@@ -78,6 +79,15 @@ const {
   getAccountSkinInfo,
   listSkinCatalog
 } = require('./engine/skinManager');
+const {
+  openMicrosoftLoginWindow,
+  completeMicrosoftAuthFromCode,
+  refreshMicrosoftSession,
+  downloadPremiumSkinBuffer,
+  uploadPremiumMinecraftSkin,
+  encryptSecret,
+  decryptSecret
+} = require('./engine/microsoftAuth');
 
 const APP_ID = 'com.peaklauncher.app';
 const ROOT_DIR = path.resolve(__dirname, '..');
@@ -169,19 +179,111 @@ function syncPeakRouterRoutes() {
   peakRouter.setRoutes(routes);
 }
 
+function sanitizeAccountForRenderer(dataDir, acc) {
+  const skin = getAccountSkinInfo(dataDir, acc);
+  const {
+    mcAccessTokenEnc,
+    msRefreshTokenEnc,
+    mcAccessToken,
+    msRefreshToken,
+    ...safeAcc
+  } = acc;
+  return {
+    ...safeAcc,
+    isPremium: safeAcc.type === 'microsoft',
+    tokenExpiresAt: safeAcc.mcTokenExpiresAt || null,
+    skinModel: skin.skinModel,
+    skinSource: skin.skinSource,
+    hasCustomSkin: skin.hasCustomSkin,
+    skinDataUrl: skin.skinDataUrl
+  };
+}
+
+async function syncPremiumSkinFromProfile(dataDir, accountId, username, activeSkin) {
+  if (!activeSkin || !activeSkin.url) return null;
+  const buf = await downloadPremiumSkinBuffer(activeSkin.url);
+  if (!buf) return null;
+  try {
+    const saved = writeAccountSkinBuffer({
+      dataDir,
+      accountId,
+      buffer: buf,
+      displayName: username,
+      model: activeSkin.model,
+      source: 'mojang-official'
+    });
+    store.updateAccountSkin(accountId, saved);
+    return saved;
+  } catch {
+    return null;
+  }
+}
+
+async function ensureFreshLaunchAccount(account, onLog = null) {
+  if (!account || account.type !== 'microsoft') return account;
+  const now = Date.now();
+  const existingAccess = decryptSecret(account.mcAccessTokenEnc);
+  const expiresAt = Number(account.mcTokenExpiresAt) || 0;
+  if (existingAccess && expiresAt - now > 5 * 60 * 1000) {
+    return { ...account, mcAccessToken: existingAccess };
+  }
+
+  const refreshTok = decryptSecret(account.msRefreshTokenEnc);
+  if (!refreshTok) {
+    throw new Error(
+      'Sesja konta Microsoft wygasła — kliknij „Odśwież sesję” lub zaloguj się ponownie w menu Konta.'
+    );
+  }
+
+  if (onLog) {
+    onLog({
+      level: 'SYSTEM',
+      text: `Odświeżanie tokenu Microsoft Premium dla ${account.username}...`,
+      ts: new Date().toISOString()
+    });
+  }
+
+  try {
+    const refreshed = await refreshMicrosoftSession(refreshTok);
+    const updated = store.updateMicrosoftTokens(account.id, {
+      username: refreshed.username,
+      xuid: refreshed.xuid,
+      mcAccessTokenEnc: encryptSecret(refreshed.mcAccessToken),
+      msRefreshTokenEnc: encryptSecret(refreshed.msRefreshToken),
+      mcTokenExpiresAt: refreshed.mcTokenExpiresAt
+    });
+    return { ...updated, mcAccessToken: refreshed.mcAccessToken };
+  } catch (err) {
+    throw new Error(
+      `Sesja konta Microsoft wygasła (${err.message}) — kliknij „Odśwież sesję” lub zaloguj się ponownie w menu Konta.`
+    );
+  }
+}
+
+async function maybeSyncSkinToMojang(acc, dataDir, modelOverride = null) {
+  if (!acc || acc.type !== 'microsoft') return { mojangSynced: false, mojangSyncError: null };
+  try {
+    const fresh = await ensureFreshLaunchAccount(acc);
+    const info = getAccountSkinInfo(dataDir, fresh);
+    if (!info.skinPath || !fs.existsSync(info.skinPath)) {
+      return { mojangSynced: false, mojangSyncError: null };
+    }
+    const pngBuffer = fs.readFileSync(info.skinPath);
+    await uploadPremiumMinecraftSkin({
+      mcAccessToken: fresh.mcAccessToken,
+      pngBuffer,
+      model: modelOverride || info.skinModel || 'classic'
+    });
+    return { mojangSynced: true, mojangSyncError: null };
+  } catch (err) {
+    return { mojangSynced: false, mojangSyncError: err.message };
+  }
+}
+
 function buildStatePayload() {
   const state = store.getState();
   const dataDir = store.getDataDir();
-  const accounts = (state.accounts || []).map((acc) => {
-    const skin = getAccountSkinInfo(dataDir, acc);
-    return {
-      ...acc,
-      skinModel: skin.skinModel,
-      skinSource: skin.skinSource,
-      hasCustomSkin: skin.hasCustomSkin,
-      skinDataUrl: skin.skinDataUrl
-    };
-  });
+  const accounts = (state.accounts || []).map((acc) => sanitizeAccountForRenderer(dataDir, acc));
   return {
     ...state,
     accounts,
@@ -235,6 +337,56 @@ function registerIpcHandlers() {
     clearAccountSkin({ dataDir: store.getDataDir(), accountId });
     return buildStatePayload();
   });
+  handleIpc('account:loginMicrosoft', async () => {
+    const authRes = await openMicrosoftLoginWindow(mainWindow);
+    if (!authRes || authRes.canceled || !authRes.code) {
+      return { canceled: true };
+    }
+    const msData = await completeMicrosoftAuthFromCode(authRes.code);
+    const saved = store.saveMicrosoftAccount({
+      uuid: msData.uuid,
+      username: msData.username,
+      xuid: msData.xuid,
+      mcAccessTokenEnc: encryptSecret(msData.mcAccessToken),
+      msRefreshTokenEnc: encryptSecret(msData.msRefreshToken),
+      mcTokenExpiresAt: msData.mcTokenExpiresAt,
+      skinModel: msData.activeSkin?.model || 'classic'
+    });
+    const dataDir = store.getDataDir();
+    await syncPremiumSkinFromProfile(dataDir, saved.id, msData.username, msData.activeSkin);
+    const finalAcc = store.getActiveAccount();
+    return {
+      canceled: false,
+      account: sanitizeAccountForRenderer(dataDir, finalAcc),
+      state: buildStatePayload()
+    };
+  });
+  handleIpc('account:refreshMicrosoft', async (_e, accountId) => {
+    const target = (store.getState().accounts || []).find(
+      (a) => a.id === accountId && a.type === 'microsoft'
+    );
+    if (!target) {
+      throw new Error('Nie znaleziono konta Premium Microsoft.');
+    }
+    const refreshTok = decryptSecret(target.msRefreshTokenEnc);
+    if (!refreshTok) {
+      throw new Error('Brak zapisanego tokenu odświeżania — zaloguj się ponownie przez Microsoft.');
+    }
+    const msData = await refreshMicrosoftSession(refreshTok);
+    const updated = store.updateMicrosoftTokens(target.id, {
+      username: msData.username,
+      xuid: msData.xuid,
+      mcAccessTokenEnc: encryptSecret(msData.mcAccessToken),
+      msRefreshTokenEnc: encryptSecret(msData.msRefreshToken),
+      mcTokenExpiresAt: msData.mcTokenExpiresAt
+    });
+    const dataDir = store.getDataDir();
+    await syncPremiumSkinFromProfile(dataDir, updated.id, msData.username, msData.activeSkin);
+    return {
+      account: sanitizeAccountForRenderer(dataDir, updated),
+      state: buildStatePayload()
+    };
+  });
 
   // Skins Studio
   const resolveTargetAccount = (accountId) =>
@@ -261,9 +413,11 @@ function registerIpcHandlers() {
       model
     });
     store.updateAccountSkin(acc.id, res);
-    return { canceled: false, skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+    const updatedAcc = resolveTargetAccount(acc.id);
+    const syncRes = await maybeSyncSkinToMojang(updatedAcc, dataDir, res.skinModel);
+    return { canceled: false, skin: res, ...syncRes, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
   });
-  handleIpc('skins:uploadPath', (_e, { accountId, filePath, model = 'classic' } = {}) => {
+  handleIpc('skins:uploadPath', async (_e, { accountId, filePath, model = 'classic' } = {}) => {
     const acc = resolveTargetAccount(accountId);
     if (!acc) throw new Error('Nie znaleziono konta.');
     const dataDir = store.getDataDir();
@@ -274,7 +428,9 @@ function registerIpcHandlers() {
       model
     });
     store.updateAccountSkin(acc.id, res);
-    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+    const updatedAcc = resolveTargetAccount(acc.id);
+    const syncRes = await maybeSyncSkinToMojang(updatedAcc, dataDir, res.skinModel);
+    return { skin: res, ...syncRes, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
   });
   handleIpc('skins:fetchByNick', async (_e, { accountId, username, model = 'classic' } = {}) => {
     const acc = resolveTargetAccount(accountId);
@@ -287,9 +443,11 @@ function registerIpcHandlers() {
       model
     });
     store.updateAccountSkin(acc.id, res);
-    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+    const updatedAcc = resolveTargetAccount(acc.id);
+    const syncRes = await maybeSyncSkinToMojang(updatedAcc, dataDir, res.skinModel);
+    return { skin: res, ...syncRes, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
   });
-  handleIpc('skins:applyPreset', (_e, { accountId, presetId } = {}) => {
+  handleIpc('skins:applyPreset', async (_e, { accountId, presetId } = {}) => {
     const acc = resolveTargetAccount(accountId);
     if (!acc) throw new Error('Nie znaleziono konta.');
     const dataDir = store.getDataDir();
@@ -299,9 +457,11 @@ function registerIpcHandlers() {
       presetId
     });
     store.updateAccountSkin(acc.id, res);
-    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+    const updatedAcc = resolveTargetAccount(acc.id);
+    const syncRes = await maybeSyncSkinToMojang(updatedAcc, dataDir, res.skinModel);
+    return { skin: res, ...syncRes, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
   });
-  handleIpc('skins:applyLibrary', (_e, { accountId, hash } = {}) => {
+  handleIpc('skins:applyLibrary', async (_e, { accountId, hash } = {}) => {
     const acc = resolveTargetAccount(accountId);
     if (!acc) throw new Error('Nie znaleziono konta.');
     const dataDir = store.getDataDir();
@@ -311,13 +471,18 @@ function registerIpcHandlers() {
       hash
     });
     store.updateAccountSkin(acc.id, res);
-    return { skin: res, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
+    const updatedAcc = resolveTargetAccount(acc.id);
+    const syncRes = await maybeSyncSkinToMojang(updatedAcc, dataDir, res.skinModel);
+    return { skin: res, ...syncRes, catalog: listSkinCatalog(dataDir), state: buildStatePayload() };
   });
-  handleIpc('skins:setModel', (_e, { accountId, model } = {}) => {
+  handleIpc('skins:setModel', async (_e, { accountId, model } = {}) => {
     const acc = resolveTargetAccount(accountId);
     if (!acc) throw new Error('Nie znaleziono konta.');
-    store.updateAccountSkin(acc.id, { skinModel: model === 'slim' ? 'slim' : 'classic' });
-    return { state: buildStatePayload() };
+    const cleanModel = model === 'slim' ? 'slim' : 'classic';
+    store.updateAccountSkin(acc.id, { skinModel: cleanModel });
+    const updatedAcc = resolveTargetAccount(acc.id);
+    const syncRes = await maybeSyncSkinToMojang(updatedAcc, store.getDataDir(), cleanModel);
+    return { ...syncRes, state: buildStatePayload() };
   });
   handleIpc('skins:reset', (_e, { accountId } = {}) => {
     const acc = resolveTargetAccount(accountId);
@@ -582,7 +747,9 @@ function registerIpcHandlers() {
     const profile = profileId ? store.getProfile(profileId) : store.getActiveProfile();
     if (!profile) throw new Error('Nie znaleziono wybranego profilu.');
     const state = store.getState();
-    const account = store.getActiveAccount();
+    const account = await ensureFreshLaunchAccount(store.getActiveAccount(), (l) =>
+      sendToRenderer('launcher:log', l)
+    );
     const dataDir = store.getDataDir();
 
     store.updateProfile(profile.id, { lastPlayedAt: new Date().toISOString() });
@@ -988,7 +1155,9 @@ function registerIpcHandlers() {
 
     store.selectProfile(profile.id);
     store.updateProfile(profile.id, { lastPlayedAt: new Date().toISOString() });
-    const account = store.getActiveAccount();
+    const account = await ensureFreshLaunchAccount(store.getActiveAccount(), (l) =>
+      sendToRenderer('launcher:log', l)
+    );
 
     const result = await launchProfile({
       profile,

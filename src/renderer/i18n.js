@@ -377,7 +377,18 @@
       toast_route_deleted: 'Usunięto trasę {domain}.',
       addr_tunnel_peak_live: 'Globalna domena .peak · aktywna',
       hshare_raw_tcp_label: 'Bezpośredni TCP (bez Peak Launchera):',
-      confirm_auto_eula: 'Aby uruchomić serwer Minecraft, wymagana jest akceptacja umowy Mojang EULA (aka.ms/MinecraftEULA). Czy akceptujesz EULA i chcesz uruchomić serwer teraz?'
+      confirm_auto_eula: 'Aby uruchomić serwer Minecraft, wymagana jest akceptacja umowy Mojang EULA (aka.ms/MinecraftEULA). Czy akceptujesz EULA i chcesz uruchomić serwer teraz?',
+      account_premium_badge: 'Premium · Microsoft',
+      btn_login_microsoft: 'Zaloguj przez Microsoft',
+      btn_login_microsoft_short: 'Zaloguj Microsoft (Premium)',
+      ms_login_waiting: 'Logowanie w oknie Microsoft...',
+      ms_login_card_title: 'Konto Premium (Microsoft)',
+      ms_login_card_sub: 'Graj na serwerach Premium (Hypixel, Realms) i synchronizuj oficjalnego skina z minecraft.net.',
+      btn_refresh_ms: 'Odśwież sesję Microsoft',
+      toast_ms_logged_in: 'Zalogowano jako konto Premium {name}!',
+      toast_ms_refreshed: 'Odświeżono sesję Premium dla {name}.',
+      toast_ms_skin_synced: 'Zapisano skin i wysłano na minecraft.net ({name})!',
+      skin_premium_active: 'Oficjalny skin Microsoft (minecraft.net)'
     },
     en: {
       nav_play: 'Play',
@@ -747,7 +758,18 @@
       toast_route_deleted: 'Removed route {domain}.',
       addr_tunnel_peak_live: 'Global .peak domain · live',
       hshare_raw_tcp_label: 'Direct TCP (non-Peak Launcher):',
-      confirm_auto_eula: 'Minecraft server startup requires accepting the Mojang EULA (aka.ms/MinecraftEULA). Accept EULA and start the server now?'
+      confirm_auto_eula: 'Minecraft server startup requires accepting the Mojang EULA (aka.ms/MinecraftEULA). Accept EULA and start the server now?',
+      account_premium_badge: 'Premium · Microsoft',
+      btn_login_microsoft: 'Sign in with Microsoft',
+      btn_login_microsoft_short: 'Microsoft Sign-In (Premium)',
+      ms_login_waiting: 'Signing in via Microsoft...',
+      ms_login_card_title: 'Premium Account (Microsoft)',
+      ms_login_card_sub: 'Play on Premium servers (Hypixel, Realms) and sync your official skin with minecraft.net.',
+      btn_refresh_ms: 'Refresh Microsoft session',
+      toast_ms_logged_in: 'Signed in as Premium account {name}!',
+      toast_ms_refreshed: 'Refreshed Premium session for {name}.',
+      toast_ms_skin_synced: 'Skin saved and synced to minecraft.net ({name})!',
+      skin_premium_active: 'Official Microsoft Skin (minecraft.net)'
     },
     de: {
       nav_play: 'Spielen',
@@ -1117,7 +1139,18 @@
       toast_route_deleted: 'Route {domain} entfernt.',
       addr_tunnel_peak_live: 'Globale .peak-Domain · aktiv',
       hshare_raw_tcp_label: 'Direktes TCP (ohne Peak Launcher):',
-      confirm_auto_eula: 'Zum Starten des Minecraft-Servers ist die Zustimmung zur Mojang EULA (aka.ms/MinecraftEULA) erforderlich. EULA akzeptieren und Server jetzt starten?'
+      confirm_auto_eula: 'Zum Starten des Minecraft-Servers ist die Zustimmung zur Mojang EULA (aka.ms/MinecraftEULA) erforderlich. EULA akzeptieren und Server jetzt starten?',
+      account_premium_badge: 'Premium · Microsoft',
+      btn_login_microsoft: 'Mit Microsoft anmelden',
+      btn_login_microsoft_short: 'Microsoft-Login (Premium)',
+      ms_login_waiting: 'Anmeldung im Microsoft-Fenster...',
+      ms_login_card_title: 'Premium-Konto (Microsoft)',
+      ms_login_card_sub: 'Spiele auf Premium-Servern (Hypixel, Realms) und synchronisiere deinen Skin mit minecraft.net.',
+      btn_refresh_ms: 'Microsoft-Sitzung aktualisieren',
+      toast_ms_logged_in: 'Als Premium-Konto {name} angemeldet!',
+      toast_ms_refreshed: 'Premium-Sitzung für {name} aktualisiert.',
+      toast_ms_skin_synced: 'Skin gespeichert und an minecraft.net gesendet ({name})!',
+      skin_premium_active: 'Offizieller Microsoft-Skin (minecraft.net)'
     },
     es: {
       nav_play: 'Jugar',
@@ -1487,7 +1520,18 @@
       toast_route_deleted: 'Ruta eliminada: {domain}.',
       addr_tunnel_peak_live: 'Dominio global .peak · activo',
       hshare_raw_tcp_label: 'TCP directo (sin Peak Launcher):',
-      confirm_auto_eula: 'Para iniciar el servidor de Minecraft debes aceptar el EULA de Mojang (aka.ms/MinecraftEULA). ¿Aceptar el EULA e iniciar ahora?'
+      confirm_auto_eula: 'Para iniciar el servidor de Minecraft debes aceptar el EULA de Mojang (aka.ms/MinecraftEULA). ¿Aceptar el EULA e iniciar ahora?',
+      account_premium_badge: 'Premium · Microsoft',
+      btn_login_microsoft: 'Iniciar sesión con Microsoft',
+      btn_login_microsoft_short: 'Entrar con Microsoft (Premium)',
+      ms_login_waiting: 'Iniciando sesión en Microsoft...',
+      ms_login_card_title: 'Cuenta Premium (Microsoft)',
+      ms_login_card_sub: 'Juega en servidores Premium (Hypixel, Realms) y sincroniza tu skin oficial en minecraft.net.',
+      btn_refresh_ms: 'Actualizar sesión de Microsoft',
+      toast_ms_logged_in: '¡Sesión iniciada como Premium ({name})!',
+      toast_ms_refreshed: 'Sesión Premium actualizada para {name}.',
+      toast_ms_skin_synced: '¡Skin guardado y sincronizado con minecraft.net ({name})!',
+      skin_premium_active: 'Skin oficial de Microsoft (minecraft.net)'
     },
     fr: {
       nav_play: 'Jouer',
@@ -1857,7 +1901,18 @@
       toast_route_deleted: 'Route supprimée : {domain}.',
       addr_tunnel_peak_live: 'Domaine global .peak · actif',
       hshare_raw_tcp_label: 'TCP direct (hors Peak Launcher) :',
-      confirm_auto_eula: 'Pour démarrer le serveur Minecraft, vous devez accepter le CLUF Mojang (aka.ms/MinecraftEULA). Accepter le CLUF et démarrer maintenant ?'
+      confirm_auto_eula: 'Pour démarrer le serveur Minecraft, vous devez accepter le CLUF Mojang (aka.ms/MinecraftEULA). Accepter le CLUF et démarrer maintenant ?',
+      account_premium_badge: 'Premium · Microsoft',
+      btn_login_microsoft: 'Se connecter avec Microsoft',
+      btn_login_microsoft_short: 'Connexion Microsoft (Premium)',
+      ms_login_waiting: 'Connexion via Microsoft...',
+      ms_login_card_title: 'Compte Premium (Microsoft)',
+      ms_login_card_sub: 'Jouez sur les serveurs Premium (Hypixel, Realms) et synchronisez votre skin sur minecraft.net.',
+      btn_refresh_ms: 'Actualiser la session Microsoft',
+      toast_ms_logged_in: 'Connecté en compte Premium {name} !',
+      toast_ms_refreshed: 'Session Premium actualisée pour {name}.',
+      toast_ms_skin_synced: 'Skin enregistré et envoyé sur minecraft.net ({name}) !',
+      skin_premium_active: 'Skin officiel Microsoft (minecraft.net)'
     },
     uk: {
       nav_play: 'Грати',
@@ -2227,7 +2282,18 @@
       toast_route_deleted: 'Маршрут видалено: {domain}.',
       addr_tunnel_peak_live: 'Глобальний домен .peak · активний',
       hshare_raw_tcp_label: 'Прямий TCP (без Peak Launcher):',
-      confirm_auto_eula: 'Для запуску сервера Minecraft потрібно прийняти ліцензійну угоду Mojang EULA (aka.ms/MinecraftEULA). Прийняти EULA та запустити сервер зараз?'
+      confirm_auto_eula: 'Для запуску сервера Minecraft потрібно прийняти ліцензійну угоду Mojang EULA (aka.ms/MinecraftEULA). Прийняти EULA та запустити сервер зараз?',
+      account_premium_badge: 'Premium · Microsoft',
+      btn_login_microsoft: 'Увійти через Microsoft',
+      btn_login_microsoft_short: 'Вхід Microsoft (Premium)',
+      ms_login_waiting: 'Вхід у вікні Microsoft...',
+      ms_login_card_title: 'Преміум-акаунт (Microsoft)',
+      ms_login_card_sub: 'Грайте на ліцензійних серверах (Hypixel, Realms) та синхронізуйте офіційний скін на minecraft.net.',
+      btn_refresh_ms: 'Оновити сесію Microsoft',
+      toast_ms_logged_in: 'Увійшли як преміум-акаунт {name}!',
+      toast_ms_refreshed: 'Сесію Premium оновлено для {name}.',
+      toast_ms_skin_synced: 'Скін збережено та відправлено на minecraft.net ({name})!',
+      skin_premium_active: 'Офіційний скін Microsoft (minecraft.net)'
     }
   };
 

@@ -260,6 +260,9 @@
 
     renderAvatarElement($('topbar-avatar'), account?.username, account?.skinDataUrl);
     $('topbar-username').textContent = account?.username || 'PeakPlayer';
+    if ($('topbar-premium-dot')) {
+      $('topbar-premium-dot').classList.toggle('hidden', account?.type !== 'microsoft');
+    }
 
     $('hero-profile-name').textContent = profile.name;
     $('hero-mc-badge').textContent = `MINECRAFT ${profile.mcVersion.toUpperCase()}`;
@@ -1033,7 +1036,7 @@
     const navAccCount = $('nav-accounts-count');
     if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
 
-    if ($('diag-version')) $('diag-version').textContent = 'v1.5.2';
+    if ($('diag-version')) $('diag-version').textContent = 'v1.6.0';
     if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
     if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
     if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
@@ -1064,11 +1067,18 @@
       const meta = document.createElement('div');
       meta.className = 'account-manager-meta';
 
+      const isMs = acc.type === 'microsoft';
       const titleRow = document.createElement('div');
       titleRow.className = 'account-manager-title';
       const title = document.createElement('span');
       title.textContent = acc.username;
       titleRow.appendChild(title);
+      if (isMs) {
+        const msBadge = document.createElement('span');
+        msBadge.className = 'account-badge-premium';
+        msBadge.textContent = 'Premium';
+        titleRow.appendChild(msBadge);
+      }
       if (isActive) {
         const badge = document.createElement('span');
         badge.className = 'account-badge-active';
@@ -1078,7 +1088,7 @@
 
       const sub = document.createElement('span');
       sub.className = 'account-manager-uuid';
-      sub.textContent = `${t('account_offline_badge')} · ${acc.uuid}`;
+      sub.textContent = `${isMs ? t('account_premium_badge') : t('account_offline_badge')} · ${acc.uuid}`;
       meta.append(titleRow, sub);
 
       left.append(av, meta);
@@ -1110,14 +1120,36 @@
       });
       actions.appendChild(copyUuidBtn);
 
-      const editBtn = document.createElement('button');
-      editBtn.className = 'btn-outline';
-      editBtn.type = 'button';
-      editBtn.textContent = t('btn_edit_account');
-      editBtn.addEventListener('click', () => {
-        openAccountsModal({ editAccount: acc, focusInput: true });
-      });
-      actions.appendChild(editBtn);
+      if (isMs) {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'btn-outline';
+        refreshBtn.type = 'button';
+        refreshBtn.title = t('btn_refresh_ms');
+        refreshBtn.textContent = '↻';
+        refreshBtn.addEventListener('click', async () => {
+          refreshBtn.disabled = true;
+          try {
+            const res = await api.refreshMicrosoftAccount(acc.id);
+            state.appState = res.state;
+            renderAll();
+            showToast(t('toast_ms_refreshed', { name: res.account.username }), 'success');
+          } catch (err) {
+            showToast(err.message, 'error');
+          } finally {
+            refreshBtn.disabled = false;
+          }
+        });
+        actions.appendChild(refreshBtn);
+      } else {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn-outline';
+        editBtn.type = 'button';
+        editBtn.textContent = t('btn_edit_account');
+        editBtn.addEventListener('click', () => {
+          openAccountsModal({ editAccount: acc, focusInput: true });
+        });
+        actions.appendChild(editBtn);
+      }
 
       if (state.appState.accounts.length > 1) {
         const delBtn = document.createElement('button');
@@ -1205,7 +1237,8 @@
       const strong = document.createElement('strong');
       strong.textContent = acc.username;
       const sub = document.createElement('span');
-      sub.textContent = isActive ? t('account_active_badge') : t('account_offline_badge');
+      const kindLabel = acc.type === 'microsoft' ? 'Premium' : t('account_offline_badge');
+      sub.textContent = isActive ? `${t('account_active_badge')} · ${kindLabel}` : kindLabel;
       meta.append(strong, sub);
 
       item.append(av, meta);
@@ -1285,11 +1318,18 @@
       const meta = document.createElement('div');
       meta.className = 'account-manager-meta';
 
+      const isMs = acc.type === 'microsoft';
       const titleRow = document.createElement('div');
       titleRow.className = 'account-manager-title';
       const nickSpan = document.createElement('span');
       nickSpan.textContent = acc.username;
       titleRow.appendChild(nickSpan);
+      if (isMs) {
+        const msBadge = document.createElement('span');
+        msBadge.className = 'account-badge-premium';
+        msBadge.textContent = 'Premium';
+        titleRow.appendChild(msBadge);
+      }
       if (isActive) {
         const badge = document.createElement('span');
         badge.className = 'account-badge-active';
@@ -1299,7 +1339,7 @@
 
       const uuidSpan = document.createElement('span');
       uuidSpan.className = 'account-manager-uuid';
-      uuidSpan.textContent = `${t('account_offline_badge')} · ${acc.uuid}`;
+      uuidSpan.textContent = `${isMs ? t('account_premium_badge') : t('account_offline_badge')} · ${acc.uuid}`;
 
       meta.append(titleRow, uuidSpan);
       left.append(av, meta);
@@ -1325,17 +1365,39 @@
         actions.appendChild(useBtn);
       }
 
-      const editBtn = document.createElement('button');
-      editBtn.className = 'btn-outline';
-      editBtn.type = 'button';
-      editBtn.title = t('btn_edit_account');
-      editBtn.textContent = '✎';
-      editBtn.addEventListener('click', () => {
-        setAccountModalMode(acc);
-        $('account-nick-input').focus();
-        $('account-nick-input').select();
-      });
-      actions.appendChild(editBtn);
+      if (isMs) {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.className = 'btn-outline';
+        refreshBtn.type = 'button';
+        refreshBtn.title = t('btn_refresh_ms');
+        refreshBtn.textContent = '↻';
+        refreshBtn.addEventListener('click', async () => {
+          refreshBtn.disabled = true;
+          try {
+            const res = await api.refreshMicrosoftAccount(acc.id);
+            state.appState = res.state;
+            renderAll();
+            showToast(t('toast_ms_refreshed', { name: res.account.username }), 'success');
+          } catch (err) {
+            showToast(err.message, 'error');
+          } finally {
+            refreshBtn.disabled = false;
+          }
+        });
+        actions.appendChild(refreshBtn);
+      } else {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn-outline';
+        editBtn.type = 'button';
+        editBtn.title = t('btn_edit_account');
+        editBtn.textContent = '✎';
+        editBtn.addEventListener('click', () => {
+          setAccountModalMode(acc);
+          $('account-nick-input').focus();
+          $('account-nick-input').select();
+        });
+        actions.appendChild(editBtn);
+      }
 
       if (accounts.length > 1) {
         const delBtn = document.createElement('button');
@@ -1541,7 +1603,15 @@
           if (res.catalog) state.skinCatalog = res.catalog;
           renderAll();
           renderSkinsView();
-          showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+          showToast(
+            res.mojangSynced
+              ? t('toast_ms_skin_synced', { name: acc.username })
+              : t('toast_skin_applied', { name: acc.username }),
+            'success'
+          );
+          if (res.mojangSyncError) {
+            showToast(res.mojangSyncError, 'info');
+          }
         } catch (err) {
           showToast(err.message, 'error');
         }
@@ -1574,7 +1644,12 @@
     const model = targetAcc?.skinModel === 'slim' ? 'slim' : 'classic';
 
     if ($('skin-badge-source')) {
-      $('skin-badge-source').textContent = hasCustom ? t('skin_custom_active') : t('skin_no_custom');
+      $('skin-badge-source').textContent =
+        targetAcc?.type === 'microsoft'
+          ? t('skin_premium_active')
+          : hasCustom
+            ? t('skin_custom_active')
+            : t('skin_no_custom');
     }
     if ($('skin-badge-model')) {
       $('skin-badge-model').textContent = model === 'slim' ? 'Slim 3px' : 'Classic 4px';
@@ -2299,6 +2374,39 @@
     $('btn-popover-manage-accounts').addEventListener('click', () =>
       openAccountsModal({ editAccount: null, focusInput: false })
     );
+
+    const triggerMicrosoftLogin = async (btnEl, isShort = false) => {
+      if (!btnEl) return;
+      closeAccountPopover();
+      const labelEl = btnEl.querySelector('span');
+      const prevText = labelEl ? labelEl.textContent : '';
+      btnEl.disabled = true;
+      if (labelEl) labelEl.textContent = t('ms_login_waiting');
+      try {
+        const res = await api.loginMicrosoftAccount();
+        if (!res || res.canceled) return;
+        state.appState = res.state;
+        renderAccountsModalList();
+        renderAll();
+        showToast(t('toast_ms_logged_in', { name: res.account.username }), 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btnEl.disabled = false;
+        if (labelEl) {
+          labelEl.textContent = isShort ? t('btn_login_microsoft_short') : prevText || t('btn_login_microsoft');
+        }
+      }
+    };
+    $('btn-popover-ms-login')?.addEventListener('click', () =>
+      triggerMicrosoftLogin($('btn-popover-ms-login'), true)
+    );
+    $('btn-modal-ms-login')?.addEventListener('click', () =>
+      triggerMicrosoftLogin($('btn-modal-ms-login'), false)
+    );
+    $('btn-settings-ms-login')?.addEventListener('click', () =>
+      triggerMicrosoftLogin($('btn-settings-ms-login'), false)
+    );
     $('modal-account-close').addEventListener('click', () => $('modal-account').classList.add('hidden'));
     $('modal-account-done').addEventListener('click', () => $('modal-account').classList.add('hidden'));
     $('modal-account-cancel-edit').addEventListener('click', () => setAccountModalMode(null));
@@ -2772,7 +2880,15 @@
           if (res.catalog) state.skinCatalog = res.catalog;
           renderAll();
           renderSkinsView();
-          showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+          showToast(
+            res.mojangSynced
+              ? t('toast_ms_skin_synced', { name: acc.username })
+              : t('toast_skin_applied', { name: acc.username }),
+            'success'
+          );
+          if (res.mojangSyncError) {
+            showToast(res.mojangSyncError, 'info');
+          }
         }
       } catch (err) {
         showToast(err.message, 'error');
@@ -2808,7 +2924,15 @@
         if (res.catalog) state.skinCatalog = res.catalog;
         renderAll();
         renderSkinsView();
-        showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+        showToast(
+          res.mojangSynced
+            ? t('toast_ms_skin_synced', { name: acc.username })
+            : t('toast_skin_applied', { name: acc.username }),
+          'success'
+        );
+        if (res.mojangSyncError) {
+          showToast(res.mojangSyncError, 'info');
+        }
       } catch (err) {
         showToast(err.message, 'error');
       }
@@ -2832,7 +2956,15 @@
         $('skin-fetch-input').value = '';
         renderAll();
         renderSkinsView();
-        showToast(t('toast_skin_applied', { name: acc.username }), 'success');
+        showToast(
+          res.mojangSynced
+            ? t('toast_ms_skin_synced', { name: acc.username })
+            : t('toast_skin_applied', { name: acc.username }),
+          'success'
+        );
+        if (res.mojangSyncError) {
+          showToast(res.mojangSyncError, 'info');
+        }
       } catch (err) {
         showToast(err.message, 'error');
       } finally {
@@ -3588,7 +3720,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.5.2 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.6.0 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

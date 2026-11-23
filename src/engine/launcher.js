@@ -285,7 +285,8 @@ function buildLaunchSpec({
   };
 
   const uuidHex = (account?.uuid || '00000000-0000-3000-8000-000000000000').replace(/-/g, '');
-  const useSkinAgent = Boolean(skinAgent && skinAgent.jarPath && skinAgent.apiUrl);
+  const isPremium = Boolean(account && account.type === 'microsoft' && account.mcAccessToken);
+  const useSkinAgent = Boolean(!isPremium && skinAgent && skinAgent.jarPath && skinAgent.apiUrl);
 
   const replacements = {
     auth_player_name: account?.username || 'PeakPlayer',
@@ -295,11 +296,13 @@ function buildLaunchSpec({
     assets_index_name: assetIndexId,
     game_assets: virtualAssetsRoot,
     auth_uuid: uuidHex,
-    auth_access_token: useSkinAgent ? uuidHex : '0',
-    auth_session: `token:${useSkinAgent ? uuidHex : '0'}:${uuidHex}`,
+    auth_access_token: isPremium ? account.mcAccessToken : useSkinAgent ? uuidHex : '0',
+    auth_session: isPremium
+      ? `token:${account.mcAccessToken}:${uuidHex}`
+      : `token:${useSkinAgent ? uuidHex : '0'}:${uuidHex}`,
     clientid: '',
-    auth_xuid: '',
-    user_type: useSkinAgent ? 'mojang' : 'legacy',
+    auth_xuid: isPremium ? String(account.xuid || '') : '',
+    user_type: isPremium ? 'msa' : useSkinAgent ? 'mojang' : 'legacy',
     user_properties: '{}',
     version_type: merged.type || 'release',
     natives_directory: nativesDir,
@@ -307,7 +310,7 @@ function buildLaunchSpec({
     classpath_separator: path.delimiter,
     classpath,
     launcher_name: 'PeakLauncher',
-    launcher_version: '1.5.2',
+    launcher_version: '1.6.0',
     resolution_width: String(settings.width || 1280),
     resolution_height: String(settings.height || 720)
   };
@@ -330,7 +333,7 @@ function buildLaunchSpec({
     jvmArgs = [
       `-Djava.library.path=${nativesDir}`,
       `-Dminecraft.launcher.brand=PeakLauncher`,
-      `-Dminecraft.launcher.version=1.5.2`,
+      `-Dminecraft.launcher.version=1.6.0`,
       '-cp',
       classpath
     ];
@@ -626,7 +629,11 @@ async function prepareProfileFiles({
 
   let skinServer = null;
   let skinAgent = null;
-  const activeSkinPath = getAccountSkinPath(dataDir, account);
+  const isPremiumAccount = Boolean(account && account.type === 'microsoft' && account.mcAccessToken);
+  const activeSkinPath = isPremiumAccount ? null : getAccountSkinPath(dataDir, account);
+  if (isPremiumAccount) {
+    log('SYSTEM', `Zalogowano jako konto Premium Microsoft (${account.username}) — używam oficjalnej sesji Mojang.`);
+  }
   if (activeSkinPath) {
     try {
       emitProgress('ready', 95, 'Przygotowanie lokalnego serwera skinów...');

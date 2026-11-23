@@ -43,6 +43,8 @@ contextBridge.exposeInMainWorld('peakAPI', {
   saveAccount: (payload) => invoke('account:save', payload),
   selectAccount: (accountId) => invoke('account:select', accountId),
   deleteAccount: (accountId) => invoke('account:delete', accountId),
+  loginMicrosoftAccount: () => invoke('account:loginMicrosoft'),
+  refreshMicrosoftAccount: (accountId) => invoke('account:refreshMicrosoft', accountId),
 
   // Skins Studio
   listSkins: () => invoke('skins:list'),

@@ -193,6 +193,7 @@ body.overlay-open .cinema-photo {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 14px;
   padding: 0 18px 0 26px;
   -webkit-app-region: drag;
 }
@@ -201,6 +202,7 @@ body.overlay-open .cinema-photo {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .topbar-icon {
@@ -216,12 +218,12 @@ body.overlay-open .cinema-photo {
 }
 
 .topbar-nav {
-  position: absolute;
-  left: 50%;
-  transform: translateX(-50%);
+  margin: 0 auto;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 18px;
+  justify-content: center;
+  gap: clamp(10px, 1.35vw, 18px);
   -webkit-app-region: no-drag;
 }
 
@@ -281,7 +283,15 @@ body.overlay-open .cinema-photo {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
   -webkit-app-region: no-drag;
+}
+
+#topbar-account-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .player-pill {
@@ -548,6 +558,11 @@ body.overlay-open .cinema-photo {
   color: var(--emerald);
   font-size: 13px;
   font-weight: 800;
+}
+
+.popover-ms-wrap {
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
 }
 
 .account-popover-footer {
@@ -2465,6 +2480,99 @@ input[type="range"].peak-slider::-webkit-slider-thumb {
   border-radius: 999px;
   background: var(--emerald-soft);
   color: var(--emerald);
+}
+
+.account-badge-premium {
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.16);
+  border: 1px solid rgba(245, 158, 11, 0.38);
+  color: #f59e0b;
+}
+
+.premium-pill-dot {
+  font-size: 11px;
+  line-height: 1;
+  color: #f59e0b;
+  margin-left: -2px;
+}
+
+.ms-auth-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.ms-auth-banner-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  flex: 1 1 220px;
+}
+
+.ms-auth-banner-copy strong,
+.ms-auth-banner-copy h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ms-auth-banner-copy span,
+.ms-auth-banner-copy p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.btn-microsoft {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-pill);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: border-color 0.14s ease, background 0.14s ease, transform 0.12s ease;
+}
+
+.btn-microsoft:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-1px);
+}
+
+.btn-microsoft:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.btn-microsoft-sm {
+  width: 100%;
+  height: 32px;
+  font-size: 12px;
+  border-radius: 9px;
+}
+
+.ms-logo-svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 .account-manager-actions {

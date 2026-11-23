@@ -77,6 +77,15 @@ const {
   startLocalSkinServer
 } = require('../src/engine/skinServer');
 const { buildLaunchSpec, ensureNativesTree, resolvePeakDnsJarPath } = require('../src/engine/launcher');
+const {
+  MS_CLIENT_ID,
+  buildAuthorizeUrl,
+  completeMicrosoftAuthFromCode,
+  refreshMicrosoftSession,
+  uploadPremiumMinecraftSkin,
+  encryptSecret,
+  decryptSecret
+} = require('../src/engine/microsoftAuth');
 
 function assertNoPlaceholders(args, label) {
   for (const arg of args) {
@@ -589,9 +598,10 @@ public class PeakDnsProbe {
     const backendPort = mockBackend.address().port;
 
     const router = new PeakDomainRouter();
-    await router.start(0, '127.0.0.1');
-    const routerPort = router.getStatus().port;
-    assert(routerPort > 0, 'PeakDomainRouter nie uruchomił się poprawnie');
+    const routerStartStatus = await router.start(0, '127.0.0.1');
+    const routerPort = routerStartStatus.port;
+    assert(routerStartStatus.listening, `PeakDomainRouter nie zaczął nasłuchiwać: ${routerStartStatus.error}`);
+    assert(routerPort > 0 && routerPort !== 25565, `PeakDomainRouter powinien użyć efemerycznego portu, a użył ${routerPort}`);
 
     router.setRoutes([
       {
@@ -1027,6 +1037,187 @@ public class PeakDnsProbe {
     }
 
     console.log(`   -> Domena .peak -Xbootclasspath/a DNS SPI (Java majors: ${testedJavaMajors}) + Fabric TCCL + tunel ssh2 + globalny katalog OK.`);
+
+    console.log('10. Testowanie konta Premium Microsoft (OAuth2 -> XBL -> XSTS -> MC Services, szyfrowanie, launch i skin sync)...');
+    const authUrl = buildAuthorizeUrl();
+    assert(authUrl.includes(`client_id=${MS_CLIENT_ID}`), 'Brak client_id w URL logowania Microsoft');
+    assert(authUrl.includes('response_type=code'), 'Brak response_type=code w URL logowania Microsoft');
+    assert(authUrl.includes('oauth20_desktop.srf'), 'Brak redirect_uri w URL logowania Microsoft');
+
+    let mockMode = 'ok';
+    let lastSkinUploadBody = Buffer.alloc(0);
+    const msMockServer = http.createServer((req, res) => {
+      const urlPath = (req.url || '/').split('?')[0];
+      const chunks = [];
+      req.on('data', (c) => chunks.push(c));
+      req.on('end', () => {
+        const raw = Buffer.concat(chunks);
+        const txt = raw.toString('utf8');
+        if (urlPath === '/token') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          const isRefresh = txt.includes('grant_type=refresh_token');
+          res.end(
+            JSON.stringify({
+              access_token: isRefresh ? 'ms-access-refreshed' : 'ms-access-1',
+              refresh_token: 'ms-refresh-next',
+              expires_in: 3600
+            })
+          );
+          return;
+        }
+        if (urlPath === '/xbl') {
+          const parsed = JSON.parse(txt);
+          assert.strictEqual(parsed.Properties?.AuthMethod, 'RPS');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ Token: 'xbl-tok-1', DisplayClaims: { xui: [{ uhs: 'mock-uhs' }] } }));
+          return;
+        }
+        if (urlPath === '/xsts') {
+          if (mockMode === 'xerr-no-xbox') {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ XErr: 2148916233 }));
+            return;
+          }
+          if (mockMode === 'xerr-child') {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ XErr: 2148916238 }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              Token: 'xsts-tok-1',
+              DisplayClaims: { xui: [{ uhs: 'mock-uhs', xid: '2535412345678901' }] }
+            })
+          );
+          return;
+        }
+        if (urlPath === '/mc/login') {
+          const parsed = JSON.parse(txt);
+          assert.strictEqual(parsed.identityToken, 'XBL3.0 x=mock-uhs;xsts-tok-1');
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ access_token: 'mc-jwt-premium-123', expires_in: 86400 }));
+          return;
+        }
+        if (urlPath === '/mc/profile') {
+          assert.strictEqual(req.headers.authorization, 'Bearer mc-jwt-premium-123');
+          if (mockMode === 'not-owned') {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'NOT_FOUND' }));
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(
+            JSON.stringify({
+              id: '069a79f444e94726a5befca90e38aaf5',
+              name: 'PeakPremium',
+              skins: [
+                {
+                  id: 'skin-1',
+                  state: 'ACTIVE',
+                  variant: 'SLIM',
+                  url: 'https://textures.minecraft.net/texture/mock'
+                }
+              ]
+            })
+          );
+          return;
+        }
+        if (urlPath === '/mc/skins') {
+          assert.strictEqual(req.headers.authorization, 'Bearer mc-jwt-premium-123');
+          lastSkinUploadBody = raw;
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end('{}');
+          return;
+        }
+        res.writeHead(404);
+        res.end();
+      });
+    });
+    await new Promise((resolve) => msMockServer.listen(0, '127.0.0.1', resolve));
+    const msBase = `http://127.0.0.1:${msMockServer.address().port}`;
+    const mockEndpoints = {
+      tokenUrl: `${msBase}/token`,
+      xblUrl: `${msBase}/xbl`,
+      xstsUrl: `${msBase}/xsts`,
+      mcLoginUrl: `${msBase}/mc/login`,
+      mcProfileUrl: `${msBase}/mc/profile`,
+      mcSkinsUrl: `${msBase}/mc/skins`
+    };
+
+    try {
+      const authData = await completeMicrosoftAuthFromCode('mock-auth-code', mockEndpoints);
+      assert.strictEqual(authData.username, 'PeakPremium');
+      assert.strictEqual(authData.uuid, '069a79f4-44e9-4726-a5be-fca90e38aaf5');
+      assert.strictEqual(authData.xuid, '2535412345678901');
+      assert.strictEqual(authData.mcAccessToken, 'mc-jwt-premium-123');
+      assert.strictEqual(authData.activeSkin.model, 'slim');
+
+      const refreshedData = await refreshMicrosoftSession('ms-refresh-1', mockEndpoints);
+      assert.strictEqual(refreshedData.msRefreshToken, 'ms-refresh-next');
+      assert.strictEqual(refreshedData.mcAccessToken, 'mc-jwt-premium-123');
+
+      mockMode = 'xerr-no-xbox';
+      await assert.rejects(() => completeMicrosoftAuthFromCode('code', mockEndpoints), /Xbox Live/i);
+      mockMode = 'xerr-child';
+      await assert.rejects(() => completeMicrosoftAuthFromCode('code', mockEndpoints), /rodziny Microsoft/i);
+      mockMode = 'not-owned';
+      await assert.rejects(() => completeMicrosoftAuthFromCode('code', mockEndpoints), /nie posiada gry Minecraft/i);
+      mockMode = 'ok';
+
+      // Encryption round-trip + store deduplication + offline rename guard
+      const secretEnc = encryptSecret(authData.mcAccessToken);
+      assert.strictEqual(decryptSecret(secretEnc), authData.mcAccessToken);
+      const msAcc1 = store.saveMicrosoftAccount({
+        uuid: authData.uuid,
+        username: authData.username,
+        xuid: authData.xuid,
+        mcAccessTokenEnc: secretEnc,
+        msRefreshTokenEnc: encryptSecret(authData.msRefreshToken),
+        mcTokenExpiresAt: authData.mcTokenExpiresAt,
+        skinModel: 'slim'
+      });
+      const msAcc2 = store.saveMicrosoftAccount({
+        uuid: authData.uuid,
+        username: authData.username,
+        xuid: authData.xuid,
+        mcAccessTokenEnc: secretEnc
+      });
+      assert.strictEqual(msAcc1.id, msAcc2.id, 'Ponowne logowanie tego samego konta Microsoft powinno aktualizować istniejący wpis');
+      assert.throws(() => store.saveAccount({ id: msAcc1.id, username: 'ChangedNick' }), /minecraft\.net/i);
+
+      // Build launch spec for Premium account -> msa + real token + real UUID + NO authlib-injector
+      const premSpec = buildLaunchSpec({
+        profile: { id: 'prem-test-1214', name: 'Prem Test', mcVersion: '1.21.4', loader: 'vanilla' },
+        account: { ...msAcc1, mcAccessToken: authData.mcAccessToken },
+        settings,
+        dataDir,
+        javaPath: dummyJava,
+        parentJson: parent1214ForQp,
+        skinAgent: { jarPath, apiUrl: 'http://127.0.0.1:12345', prefetchedBase64: 'abc' }
+      });
+      assert(premSpec.args.includes('mc-jwt-premium-123'), 'Brak tokenu Microsoft w argumentach startu gry');
+      assert(premSpec.args.includes('069a79f444e94726a5befca90e38aaf5'), 'Brak oficjalnego UUID w argumentach startu gry');
+      const utIdx = premSpec.args.indexOf('--userType');
+      assert(utIdx !== -1 && premSpec.args[utIdx + 1] === 'msa', `Oczekiwano --userType msa, jest: ${premSpec.args[utIdx + 1]}`);
+      assert(!premSpec.args.some((a) => a.includes('authlib-injector')), 'Konto Premium Microsoft nie może wstrzykiwać authlib-injector');
+
+      // Multipart skin upload to minecraft.net
+      const presetSkinPng = fs.readFileSync(path.resolve(__dirname, '..', 'assets', 'skins', 'peak-climber.png'));
+      await uploadPremiumMinecraftSkin({
+        mcAccessToken: authData.mcAccessToken,
+        pngBuffer: presetSkinPng,
+        model: 'slim',
+        endpoints: mockEndpoints
+      });
+      assert(lastSkinUploadBody.includes(Buffer.from('slim')), 'Upload skina nie przekazał wariantu slim');
+      assert(lastSkinUploadBody.includes(Buffer.from('skin.png')), 'Upload skina nie przekazał pliku PNG');
+
+      store.deleteAccount(msAcc1.id);
+      console.log('   -> Microsoft OAuth2/XBL/XSTS/MC Services, DPAPI/plain crypto, msa launch i sync skina OK.');
+    } finally {
+      await new Promise((resolve) => msMockServer.close(resolve));
+    }
 
     console.log('\nWSZYSTKIE TESTY SILNIKA ZAKOŃCZONE SUKCESEM!');
   } finally {

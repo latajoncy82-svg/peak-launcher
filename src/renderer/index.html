@@ -48,6 +48,7 @@
         <button id="topbar-account-btn" class="player-pill" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="topbar-account-popover">
           <span class="player-avatar-mini" id="topbar-avatar">P</span>
           <span class="player-nick" id="topbar-username">PeakPlayer</span>
+          <span id="topbar-premium-dot" class="premium-pill-dot hidden" title="Microsoft Premium">★</span>
           <svg class="player-chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M3 4.5L6 7.5L9 4.5" />
           </svg>
@@ -59,6 +60,17 @@
             <span id="popover-accounts-count" class="quiet-pill">1</span>
           </div>
           <div id="popover-accounts-list" class="account-popover-list"></div>
+          <div class="popover-ms-wrap">
+            <button id="btn-popover-ms-login" class="btn-microsoft btn-microsoft-sm" type="button">
+              <svg class="ms-logo-svg" viewBox="0 0 16 16" aria-hidden="true">
+                <rect x="1" y="1" width="6.5" height="6.5" fill="#F25022" />
+                <rect x="8.5" y="1" width="6.5" height="6.5" fill="#7FBA00" />
+                <rect x="1" y="8.5" width="6.5" height="6.5" fill="#00A4EF" />
+                <rect x="8.5" y="8.5" width="6.5" height="6.5" fill="#FFB900" />
+              </svg>
+              <span data-i18n="btn_login_microsoft_short">Zaloguj Microsoft (Premium)</span>
+            </button>
+          </div>
           <div class="account-popover-footer triple">
             <button id="btn-popover-add-account" class="popover-action-btn primary" type="button" data-i18n="btn_add_account">+ Dodaj konto</button>
             <button id="btn-popover-skin" class="popover-action-btn" type="button" data-i18n="btn_skin_short">Skin</button>
@@ -1023,7 +1035,7 @@
             </button>
 
             <div class="settings-sidebar-meta">
-              <span>Peak Launcher v1.5.2</span>
+              <span>Peak Launcher v1.6.0</span>
               <span>Windows x64 · MIT</span>
             </div>
           </aside>
@@ -1241,7 +1253,7 @@
                 <div class="diag-grid">
                   <div class="diag-card">
                     <span data-i18n="diag_version">Wersja launchera</span>
-                    <strong id="diag-version">v1.5.2</strong>
+                    <strong id="diag-version">v1.6.0</strong>
                   </div>
                   <div class="diag-card">
                     <span data-i18n="diag_ram">Pamięć systemu</span>
@@ -1261,6 +1273,24 @@
 
             <!-- PANE 4: ACCOUNTS -->
             <div id="setting-pane-accounts" class="settings-pane" role="tabpanel">
+              <section class="settings-card">
+                <div class="ms-auth-banner">
+                  <div class="ms-auth-banner-copy">
+                    <h3 data-i18n="ms_login_card_title">Konto Premium (Microsoft)</h3>
+                    <p data-i18n="ms_login_card_sub">Graj na serwerach Premium (Hypixel, Realms) i synchronizuj oficjalnego skina z minecraft.net.</p>
+                  </div>
+                  <button id="btn-settings-ms-login" class="btn-microsoft" type="button">
+                    <svg class="ms-logo-svg" viewBox="0 0 16 16" aria-hidden="true">
+                      <rect x="1" y="1" width="6.5" height="6.5" fill="#F25022" />
+                      <rect x="8.5" y="1" width="6.5" height="6.5" fill="#7FBA00" />
+                      <rect x="1" y="8.5" width="6.5" height="6.5" fill="#00A4EF" />
+                      <rect x="8.5" y="8.5" width="6.5" height="6.5" fill="#FFB900" />
+                    </svg>
+                    <span data-i18n="btn_login_microsoft">Zaloguj przez Microsoft</span>
+                  </button>
+                </div>
+              </section>
+
               <section class="settings-card">
                 <div class="settings-card-head">
                   <h3 data-i18n="card_add_account_title">Dodaj nowe konto</h3>
@@ -1419,6 +1449,22 @@
       </div>
       <div class="modal-body">
         <div id="modal-accounts-list" class="accounts-manager-list"></div>
+        <div class="divider-line"></div>
+        <div class="ms-auth-banner modal-ms-banner">
+          <div class="ms-auth-banner-copy">
+            <strong data-i18n="ms_login_card_title">Konto Premium (Microsoft)</strong>
+            <span data-i18n="ms_login_card_sub">Graj na serwerach Premium (Hypixel, Realms) i synchronizuj oficjalnego skina z minecraft.net.</span>
+          </div>
+          <button id="btn-modal-ms-login" class="btn-microsoft" type="button">
+            <svg class="ms-logo-svg" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="1" y="1" width="6.5" height="6.5" fill="#F25022" />
+              <rect x="8.5" y="1" width="6.5" height="6.5" fill="#7FBA00" />
+              <rect x="1" y="8.5" width="6.5" height="6.5" fill="#00A4EF" />
+              <rect x="8.5" y="8.5" width="6.5" height="6.5" fill="#FFB900" />
+            </svg>
+            <span data-i18n="btn_login_microsoft">Zaloguj przez Microsoft</span>
+          </button>
+        </div>
         <div class="divider-line"></div>
         <div class="account-form-box">
           <span id="account-form-heading" class="group-label" data-i18n="account_form_add">Dodaj nowe konto (Offline)</span>
