@@ -1,5 +1,27 @@
 [
   {
+    "tag": "v1.7.2",
+    "name": "Peak Launcher 1.7.2 — Naprawione kliknięcia w MC 26.3 i odświeżone Peak Client GUI",
+    "publishedAt": "2026-11-24T19:25:00Z",
+    "body": "### Najważniejsze nowości i poprawki w wersji 1.7.2\n- **Naprawa obsługi myszy SDL3 w MC `26.3`**: Poprawiono kody przycisków myszy (`InputConstants.MOUSE_BUTTON_LEFT = 1`, `MOUSE_BUTTON_RIGHT = 3`), dzięki czemu wszystkie przyciski i zakładki w **Peak GUI**, przeciąganie w **Edytorze HUD** oraz licznik **CPS** działają prawidłowo.\n- **Nowy wygląd Peak Client GUI**: Zaokrąglone karty i przełączniki typu pill toggle, ikony wektorowe modułów, miękki cień pływającego okna, odświeżony górski emblemat oraz pasek skrótów.\n- **Adaptacyjne skalowanie menu**: Okno Peak GUI automatycznie dopasowuje się do każdej skali interfejsu Minecrafta bez ucinania tekstu i dolnych kart.",
+    "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.7.2",
+    "prerelease": false,
+    "assets": {
+      "installer": {
+        "name": "Peak-Launcher-Setup-1.7.2.exe",
+        "size": 124711720,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.7.2/Peak-Launcher-Setup-1.7.2.exe",
+        "downloadCount": 0
+      },
+      "portable": {
+        "name": "Peak-Launcher-Portable-1.7.2.exe",
+        "size": 113360526,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.7.2/Peak-Launcher-Portable-1.7.2.exe",
+        "downloadCount": 0
+      }
+    }
+  },
+  {
     "tag": "v1.7.1",
     "name": "Peak Launcher 1.7.1 — Kompaktowy HUD w grze i regulacja skali Peak Client",
     "publishedAt": "2026-11-24T18:50:00Z",
