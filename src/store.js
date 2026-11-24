@@ -138,7 +138,13 @@ function createDefaultConfig() {
       jvmArgs: '',
       autoInstallJava: true,
       autoInstallFabric: true,
-      closeOnLaunch: false
+      closeOnLaunch: false,
+      peakClientEnabled: true,
+      peakResourcePack: true,
+      peakBetterF3: true,
+      peakMainMenu: true,
+      peakDarkButtons: true,
+      peakAccentColor: '#38BDF8'
     }
   };
 }

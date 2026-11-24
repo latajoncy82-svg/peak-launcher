@@ -1,0 +1,22 @@
+package pl.peaklauncher.client.mixin;
+
+import net.minecraft.class_310;
+import net.minecraft.class_332;
+import net.minecraft.class_442;
+import net.minecraft.class_8020;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import pl.peaklauncher.client.PeakClientConfig;
+
+@Mixin(class_8020.class)
+public class LogoDrawerMixin {
+  @Inject(method = "method_48210(Lnet/minecraft/class_332;IFI)V", at = @At("HEAD"), cancellable = true)
+  private void peak$hideVanillaLogoOnPeakTitle(class_332 context, int width, float alpha, int yOffset, CallbackInfo ci) {
+    class_310 mc = class_310.method_1551();
+    if (PeakClientConfig.get().peakMainMenu && mc != null && mc.field_1755 instanceof class_442) {
+      ci.cancel();
+    }
+  }
+}

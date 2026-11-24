@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "peakclient",
+  "version": "1.7.0",
+  "name": "Peak Client",
+  "description": "Peak Launcher in-game Alpine UI, Better F3, Peak HUD addons, Zoom, Fullbright and Peak Client GUI.",
+  "authors": ["Peak Launcher"],
+  "contact": {
+    "homepage": "https://latajoncy82-svg.github.io/peak-launcher/"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "pl.peaklauncher.client.PeakClientMod"
+    ]
+  },
+  "mixins": [
+    "peak-client.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=0.16.0"
+  }
+}

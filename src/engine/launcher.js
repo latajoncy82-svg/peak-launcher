@@ -5,6 +5,7 @@ const { downloadBatch, downloadFile, safeExtractZip } = require('./download');
 const { findInstalledFabricForMc, installFabric, mavenNameToRelativePath } = require('./fabricManager');
 const { findJavaForMajor, installJava } = require('./javaManager');
 const { ensureDataTree, ensureDir, getPaths, getProfileDirs } = require('./paths');
+const { syncPeakClientForProfile } = require('./peakClientManager');
 const { getAccountSkinPath } = require('./skinManager');
 const { ensureAuthlibInjector, startLocalSkinServer } = require('./skinServer');
 const { ensureVersionJson } = require('./versions');
@@ -310,7 +311,7 @@ function buildLaunchSpec({
     classpath_separator: path.delimiter,
     classpath,
     launcher_name: 'PeakLauncher',
-    launcher_version: '1.6.0',
+    launcher_version: '1.7.0',
     resolution_width: String(settings.width || 1280),
     resolution_height: String(settings.height || 720)
   };
@@ -333,7 +334,7 @@ function buildLaunchSpec({
     jvmArgs = [
       `-Djava.library.path=${nativesDir}`,
       `-Dminecraft.launcher.brand=PeakLauncher`,
-      `-Dminecraft.launcher.version=1.6.0`,
+      `-Dminecraft.launcher.version=1.7.0`,
       '-cp',
       classpath
     ];
@@ -513,6 +514,7 @@ async function prepareProfileFiles({
   account,
   allAccounts = [],
   settings = {},
+  language = 'pl',
   dataDir,
   quickPlayServer = null,
   onProgress = null,
@@ -530,6 +532,12 @@ async function prepareProfileFiles({
   ensureDir(profileDirs.instanceDir);
   ensureDir(profileDirs.modsDir);
   ensureDir(profileDirs.configDir);
+
+  try {
+    syncPeakClientForProfile({ profile, settings, language, dataDir, onLog });
+  } catch (peakErr) {
+    log('WARN', `Synchronizacja Peak Client nie powiodła się (${peakErr.message}).`);
+  }
 
   emitProgress('version', 10, `Pobieranie metadanych Minecraft ${profile.mcVersion}...`);
   log('SYSTEM', `Przygotowanie profilu "${profile.name}" (MC ${profile.mcVersion}, ${profile.loader})...`);
@@ -682,6 +690,7 @@ async function launchProfile({
   account,
   allAccounts = [],
   settings,
+  language = 'pl',
   dataDir,
   quickPlayServer = null,
   onProgress = null,
@@ -712,6 +721,7 @@ async function launchProfile({
       account,
       allAccounts,
       settings,
+      language,
       dataDir,
       quickPlayServer,
       onProgress,

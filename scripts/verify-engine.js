@@ -86,6 +86,13 @@ const {
   encryptSecret,
   decryptSecret
 } = require('../src/engine/microsoftAuth');
+const {
+  MANAGED_MOD_FILENAME,
+  PACK_FILENAME,
+  PACK_OPTION_ENTRY,
+  resolveBundledAssetPath,
+  syncPeakClientForProfile
+} = require('../src/engine/peakClientManager');
 
 function assertNoPlaceholders(args, label) {
   for (const arg of args) {
@@ -1218,6 +1225,110 @@ public class PeakDnsProbe {
     } finally {
       await new Promise((resolve) => msMockServer.close(resolve));
     }
+
+    console.log('11. Test Peak Client (MC 26.3 / 1.21.4 Fabric mod, uniwersalna paczka UI, konfiguracja HUD i cleanup)...');
+    const bundledPack = resolveBundledAssetPath('peak-ui-pack.zip');
+    const bundledMc26 = resolveBundledAssetPath('peak-client-mc26.jar');
+    const bundledMc1214 = resolveBundledAssetPath('peak-client-mc1214.jar');
+    assert(bundledPack && fs.existsSync(bundledPack), 'Brak peak-ui-pack.zip w assets/');
+    assert(bundledMc26 && fs.existsSync(bundledMc26), 'Brak peak-client-mc26.jar w assets/');
+    assert(bundledMc1214 && fs.existsSync(bundledMc1214), 'Brak peak-client-mc1214.jar w assets/');
+
+    const storeDefaults = store.getState().settings;
+    assert.strictEqual(storeDefaults.peakClientEnabled, true);
+    assert.strictEqual(storeDefaults.peakResourcePack, true);
+    assert.strictEqual(storeDefaults.peakBetterF3, true);
+    assert.strictEqual(storeDefaults.peakMainMenu, true);
+    assert.strictEqual(storeDefaults.peakDarkButtons, true);
+    assert.strictEqual(storeDefaults.peakAccentColor, '#38BDF8');
+
+    // 11a: MC 26.3 Fabric
+    const p26 = { id: 'peakclient-26-3', mcVersion: '26.3', loader: 'fabric' };
+    const p26Dirs = getProfileDirs(dataDir, p26.id);
+    const res26 = syncPeakClientForProfile({
+      profile: p26,
+      settings: storeDefaults,
+      language: 'pl',
+      dataDir
+    });
+    assert.strictEqual(res26.modInstalled, true);
+    assert.strictEqual(res26.modAssetName, 'peak-client-mc26.jar');
+    assert.strictEqual(res26.packInstalled, true);
+    assert(fs.existsSync(path.join(p26Dirs.modsDir, MANAGED_MOD_FILENAME)), 'Brak skopiowanego moda mc26');
+    assert(fs.existsSync(path.join(p26Dirs.resourcepacksDir, PACK_FILENAME)), 'Brak paczki Peak-Alpine-UI.zip');
+    const opt26 = fs.readFileSync(path.join(p26Dirs.instanceDir, 'options.txt'), 'utf8');
+    assert(opt26.includes(PACK_OPTION_ENTRY), 'options.txt nie włączyło Peak-Alpine-UI.zip');
+    assert(opt26.includes('"fabric"'), 'options.txt dla Fabric nie zawiera paczki fabric');
+
+    // Zachowanie pozycji HUD po ponownej synchronizacji ze zmianą akcentu
+    const cfg26Path = path.join(p26Dirs.configDir, 'peak-client.json');
+    const cfg26 = JSON.parse(fs.readFileSync(cfg26Path, 'utf8'));
+    assert.strictEqual(cfg26.accentColor, '#38BDF8');
+    cfg26.fpsX = 420;
+    cfg26.fpsY = 88;
+    fs.writeFileSync(cfg26Path, JSON.stringify(cfg26, null, 2), 'utf8');
+    syncPeakClientForProfile({
+      profile: p26,
+      settings: { ...storeDefaults, peakAccentColor: '#818CF8' },
+      language: 'en',
+      dataDir
+    });
+    const cfg26Updated = JSON.parse(fs.readFileSync(cfg26Path, 'utf8'));
+    assert.strictEqual(cfg26Updated.fpsX, 420, 'Synchronizacja nie może nadpisywać własnych pozycji HUD');
+    assert.strictEqual(cfg26Updated.fpsY, 88);
+    assert.strictEqual(cfg26Updated.accentColor, '#818CF8');
+    assert.strictEqual(cfg26Updated.language, 'en');
+
+    // Wyłączenie samego moda, potem również paczki UI
+    syncPeakClientForProfile({
+      profile: p26,
+      settings: { ...storeDefaults, peakClientEnabled: false, peakResourcePack: true },
+      language: 'pl',
+      dataDir
+    });
+    assert(!fs.existsSync(path.join(p26Dirs.modsDir, MANAGED_MOD_FILENAME)), 'Wyłączony mod nie został usunięty');
+    assert(fs.existsSync(path.join(p26Dirs.resourcepacksDir, PACK_FILENAME)), 'Paczka UI powinna pozostać aktywna');
+    syncPeakClientForProfile({
+      profile: p26,
+      settings: { ...storeDefaults, peakClientEnabled: false, peakResourcePack: false },
+      language: 'pl',
+      dataDir
+    });
+    assert(!fs.existsSync(path.join(p26Dirs.resourcepacksDir, PACK_FILENAME)), 'Wyłączona paczka UI powinna zostać usunięta');
+    assert(!fs.readFileSync(path.join(p26Dirs.instanceDir, 'options.txt'), 'utf8').includes(PACK_OPTION_ENTRY));
+
+    // 11b: MC 1.21.4 Fabric
+    const p1214 = { id: 'peakclient-1214', mcVersion: '1.21.4', loader: 'fabric' };
+    const p1214Dirs = getProfileDirs(dataDir, p1214.id);
+    const res1214 = syncPeakClientForProfile({
+      profile: p1214,
+      settings: storeDefaults,
+      language: 'pl',
+      dataDir
+    });
+    assert.strictEqual(res1214.modInstalled, true);
+    assert.strictEqual(res1214.modAssetName, 'peak-client-mc1214.jar');
+    assert.strictEqual(
+      fs.statSync(path.join(p1214Dirs.modsDir, MANAGED_MOD_FILENAME)).size,
+      fs.statSync(bundledMc1214).size
+    );
+
+    // 11c: Vanilla 1.21.4 — czyszczenie starego moda + zachowanie paczki UI
+    const pVanilla = { id: 'peakclient-vanilla', mcVersion: '1.21.4', loader: 'vanilla' };
+    const pVanillaDirs = getProfileDirs(dataDir, pVanilla.id);
+    fs.mkdirSync(pVanillaDirs.modsDir, { recursive: true });
+    fs.writeFileSync(path.join(pVanillaDirs.modsDir, MANAGED_MOD_FILENAME), 'stale');
+    const resVanilla = syncPeakClientForProfile({
+      profile: pVanilla,
+      settings: storeDefaults,
+      language: 'pl',
+      dataDir
+    });
+    assert.strictEqual(resVanilla.modInstalled, false);
+    assert.strictEqual(resVanilla.packInstalled, true);
+    assert(!fs.existsSync(path.join(pVanillaDirs.modsDir, MANAGED_MOD_FILENAME)), 'Stary mod na profilu Vanilla powinien zostać usunięty');
+    assert(fs.existsSync(path.join(pVanillaDirs.resourcepacksDir, PACK_FILENAME)));
+    console.log('   -> Peak Client sync, zachowanie pozycji HUD, 26.3 / 1.21.4 / Vanilla cleanup OK.');
 
     console.log('\nWSZYSTKIE TESTY SILNIKA ZAKOŃCZONE SUKCESEM!');
   } finally {

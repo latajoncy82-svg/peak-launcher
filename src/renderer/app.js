@@ -306,6 +306,23 @@
       fabBtn.classList.add('hidden');
     }
 
+    const pcPill = $('btn-hero-peak-client');
+    if (pcPill) {
+      const s = state.appState.settings || {};
+      const mcVer = String(profile.mcVersion || '');
+      const hasFullClient = profile.loader === 'fabric' && (/^26\.3(\.|$)/.test(mcVer) || mcVer === '1.21.4');
+      const isEnabled = hasFullClient ? s.peakClientEnabled !== false : s.peakResourcePack !== false;
+      pcPill.classList.toggle('is-off', !isEnabled);
+      const lbl = $('btn-hero-peak-client-label');
+      if (lbl) {
+        lbl.textContent = !isEnabled
+          ? 'PEAK CLIENT: OFF'
+          : hasFullClient
+            ? 'PEAK CLIENT · F3 + GUI'
+            : 'PEAK UI PACK';
+      }
+    }
+
     $('btn-hero-delete-profile').classList.toggle('hidden', state.appState.profiles.length <= 1);
 
     const strip = $('profiles-strip');
@@ -989,9 +1006,16 @@
         autoInstallJava: $('setting-auto-java').checked,
         autoInstallFabric: $('setting-auto-fabric').checked,
         closeOnLaunch: $('setting-close-launch').checked,
-        jvmArgs: $('setting-jvm-args').value
+        jvmArgs: $('setting-jvm-args').value,
+        peakClientEnabled: $('setting-peak-client') ? $('setting-peak-client').checked : true,
+        peakResourcePack: $('setting-peak-pack') ? $('setting-peak-pack').checked : true,
+        peakBetterF3: $('setting-peak-f3') ? $('setting-peak-f3').checked : true,
+        peakMainMenu: $('setting-peak-menu') ? $('setting-peak-menu').checked : true,
+        peakDarkButtons: $('setting-peak-buttons') ? $('setting-peak-buttons').checked : true,
+        peakAccentColor: state.appState?.settings?.peakAccentColor || '#38BDF8'
       });
       renderSettingsView();
+      renderPlayView();
       flashSavedBadge();
       if (showNotification) {
         showToast(t('toast_saved_settings'), 'success');
@@ -1033,10 +1057,38 @@
     });
     $('setting-datadir-path').textContent = state.appState.dataDir || '';
 
+    const pcActive = s.peakClientEnabled !== false;
+    if ($('setting-peak-client')) $('setting-peak-client').checked = pcActive;
+    if ($('setting-peak-pack')) $('setting-peak-pack').checked = s.peakResourcePack !== false;
+    if ($('setting-peak-f3')) $('setting-peak-f3').checked = s.peakBetterF3 !== false;
+    if ($('setting-peak-menu')) $('setting-peak-menu').checked = s.peakMainMenu !== false;
+    if ($('setting-peak-buttons')) $('setting-peak-buttons').checked = s.peakDarkButtons !== false;
+    const navPcPill = $('nav-peakclient-pill');
+    if (navPcPill) navPcPill.textContent = pcActive || s.peakResourcePack !== false ? 'ON' : 'OFF';
+
+    const curAccent = String(s.peakAccentColor || '#38BDF8').toUpperCase();
+    document.querySelectorAll('#peak-accent-swatches .peakclient-swatch').forEach((btn) => {
+      const match = String(btn.dataset.accent || '').toUpperCase() === curAccent;
+      btn.classList.toggle('active', match);
+      btn.textContent = match ? '✓' : '';
+    });
+
+    const pcNote = $('peakclient-support-note');
+    if (pcNote) {
+      const prof = getActiveProfile();
+      const mcVer = String(prof?.mcVersion || '');
+      const fullMod = prof?.loader === 'fabric' && (/^26\.3(\.|$)/.test(mcVer) || mcVer === '1.21.4');
+      pcNote.textContent = fullMod
+        ? t('pc_support_full', { name: prof.name, ver: mcVer })
+        : prof?.loader === 'vanilla'
+          ? t('pc_support_pack_only', { name: prof.name, ver: mcVer })
+          : t('pc_support_pack_generic', { name: prof?.name || '', ver: mcVer });
+    }
+
     const navAccCount = $('nav-accounts-count');
     if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
 
-    if ($('diag-version')) $('diag-version').textContent = 'v1.6.0';
+    if ($('diag-version')) $('diag-version').textContent = 'v1.7.0';
     if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
     if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
     if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
@@ -2777,6 +2829,32 @@
     $('setting-auto-java').addEventListener('change', () => saveSettingsNow({ showNotification: false }));
     $('setting-auto-fabric').addEventListener('change', () => saveSettingsNow({ showNotification: false }));
 
+    for (const id of ['setting-peak-client', 'setting-peak-pack', 'setting-peak-f3', 'setting-peak-menu', 'setting-peak-buttons']) {
+      const el = $(id);
+      if (el) el.addEventListener('change', () => saveSettingsNow({ showNotification: false }));
+    }
+    const swatchesEl = $('peak-accent-swatches');
+    if (swatchesEl) {
+      swatchesEl.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.peakclient-swatch');
+        if (!btn || !btn.dataset.accent) return;
+        try {
+          state.appState = await api.updateSettings({ peakAccentColor: btn.dataset.accent });
+          renderSettingsView();
+          flashSavedBadge();
+        } catch (err) {
+          showToast(err.message, 'error');
+        }
+      });
+    }
+    const heroPcBtn = $('btn-hero-peak-client');
+    if (heroPcBtn) {
+      heroPcBtn.addEventListener('click', () => {
+        switchView('console');
+        switchSettingSection('peakclient');
+      });
+    }
+
     $('btn-save-settings').addEventListener('click', () => saveSettingsNow({ showNotification: true }));
 
     $('btn-reset-settings').addEventListener('click', async () => {
@@ -2791,9 +2869,16 @@
           autoInstallJava: true,
           autoInstallFabric: true,
           closeOnLaunch: false,
-          jvmArgs: ''
+          jvmArgs: '',
+          peakClientEnabled: true,
+          peakResourcePack: true,
+          peakBetterF3: true,
+          peakMainMenu: true,
+          peakDarkButtons: true,
+          peakAccentColor: '#38BDF8'
         });
         renderSettingsView();
+        renderPlayView();
         flashSavedBadge();
         showToast(t('toast_settings_reset'), 'info');
       } catch (err) {
@@ -3720,7 +3805,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.6.0 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.7.0 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

@@ -169,6 +169,10 @@
               <button id="btn-hero-go-mods" class="meta-link-btn" type="button">0 MODÓW</button>
             </span>
 
+            <button id="btn-hero-peak-client" class="peakclient-hero-pill" type="button">
+              <span class="peakclient-hero-dot"></span>
+              <span id="btn-hero-peak-client-label">PEAK CLIENT</span>
+            </button>
             <button id="btn-quick-install-java" class="meta-action-pill hidden" type="button">
               Pobierz Javę
             </button>
@@ -1008,6 +1012,17 @@
               </span>
             </button>
 
+            <button class="settings-nav-item" type="button" role="tab" aria-selected="false" data-setting-section="peakclient">
+              <span class="settings-nav-left">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M2 13L6.8 3.6a1.1 1.1 0 0 1 2 0L14 13H2z" />
+                  <path d="M5.5 8.5l2.1 1.5 2.4-2.2" />
+                </svg>
+                <span data-i18n="set_nav_peakclient">Peak Client (W grze)</span>
+              </span>
+              <span id="nav-peakclient-pill" class="quiet-pill">ON</span>
+            </button>
+
             <button class="settings-nav-item" type="button" role="tab" aria-selected="false" data-setting-section="accounts">
               <span class="settings-nav-left">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1035,7 +1050,7 @@
             </button>
 
             <div class="settings-sidebar-meta">
-              <span>Peak Launcher v1.6.0</span>
+              <span>Peak Launcher v1.7.0</span>
               <span>Windows x64 · MIT</span>
             </div>
           </aside>
@@ -1253,7 +1268,7 @@
                 <div class="diag-grid">
                   <div class="diag-card">
                     <span data-i18n="diag_version">Wersja launchera</span>
-                    <strong id="diag-version">v1.6.0</strong>
+                    <strong id="diag-version">v1.7.0</strong>
                   </div>
                   <div class="diag-card">
                     <span data-i18n="diag_ram">Pamięć systemu</span>
@@ -1271,7 +1286,108 @@
               </section>
             </div>
 
-            <!-- PANE 4: ACCOUNTS -->
+            <!-- PANE 4: PEAK CLIENT (IN-GAME) -->
+            <div id="setting-pane-peakclient" class="settings-pane" role="tabpanel">
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="pc_card_title">Peak Client — Alpejski wygląd, Lepsze F3 i Nowe GUI w grze</h3>
+                  <p data-i18n="pc_card_sub">Automatycznie wstrzykiwany przy starcie gry: nowoczesne menu główne Peak, szklane przyciski, Lepsze F3, HUD oraz panel zarządzania w grze.</p>
+                </div>
+                <div id="peakclient-support-note" class="peakclient-support-note">...</div>
+                <div class="peakclient-keybinds">
+                  <span class="peakclient-keychip"><kbd>RShift</kbd> <span data-i18n="pc_key_gui">Peak Client GUI + Edytor HUD</span></span>
+                  <span class="peakclient-keychip"><kbd>F3</kbd> <span data-i18n="pc_key_f3">Lepsze F3</span></span>
+                  <span class="peakclient-keychip"><kbd>C</kbd> <span data-i18n="pc_key_zoom">Zoom + Scroll</span></span>
+                  <span class="peakclient-keychip"><kbd>G</kbd> <span data-i18n="pc_key_fb">Fullbright</span></span>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="pc_toggles_title">Funkcje i moduły w grze</h3>
+                </div>
+
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="pc_enable_mod">Wbudowany mod Peak Client (Fabric 26.3 i 1.21.4)</strong>
+                    <span data-i18n="pc_enable_mod_sub">Dodaje w grze menu pod Right Shift, Edytor HUD (FPS, Coords, CPS, Keystrokes, Armor, Efekty, Ping), Zoom (C), Fullbright (G) i Toggle Sprint.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-peak-client" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="divider-line"></div>
+
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="pc_enable_pack">Paczka zasobów Peak Alpine UI (wszystkie wersje, także Vanilla)</strong>
+                    <span data-i18n="pc_enable_pack_sub">Ustawia ciemną alpejską panoramę nocnych szczytów, szklany hotbar z niebieskim zaznaczeniem i czysty celownik.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-peak-pack" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="divider-line"></div>
+
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="pc_enable_f3">Lepsze F3 (Nowoczesne karty diagnostyczne)</strong>
+                    <span data-i18n="pc_enable_f3_sub">Zastępuje chaotyczną ścianę tekstu F3 czystymi kartami Peak: Wydajność (FPS, RAM bar, GPU), Pozycja + Nether, Świat i Celowanie.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-peak-f3" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="divider-line"></div>
+
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="pc_enable_menu">Alpejskie Menu Główne i ekran ładowania w grze</strong>
+                    <span data-i18n="pc_enable_menu_sub">Podmienia panoramę startową na animowane nocne góry Peak z kartą konta gracza, logotypem PEAK CLIENT i ciemnym ładowaniem Mojang.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-peak-menu" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+
+                <div class="divider-line"></div>
+
+                <div class="setting-row">
+                  <div class="setting-row-copy">
+                    <strong data-i18n="pc_enable_buttons">Ciemnoszklane przyciski interfejsu w grze</strong>
+                    <span data-i18n="pc_enable_buttons_sub">Zamienia klasyczne szare przyciski Minecrafta w przezroczyste przyciski alpejskiego szkła z podświetleniem.</span>
+                  </div>
+                  <label class="peak-switch">
+                    <input id="setting-peak-buttons" type="checkbox" checked />
+                    <span class="peak-switch-track"><span class="peak-switch-thumb"></span></span>
+                  </label>
+                </div>
+              </section>
+
+              <section class="settings-card">
+                <div class="settings-card-head">
+                  <h3 data-i18n="pc_accent_title">Kolor akcentu Peak Client w grze</h3>
+                  <p data-i18n="pc_accent_sub">Możesz go zmieniać zarówno tutaj, jak i bezpośrednio podczas gry w oknie Peak GUI (Right Shift).</p>
+                </div>
+                <div id="peak-accent-swatches" class="peakclient-swatch-row">
+                  <button class="peakclient-swatch active" type="button" data-accent="#38BDF8" style="--swatch:#38BDF8" title="Ice Blue (#38BDF8)">✓</button>
+                  <button class="peakclient-swatch" type="button" data-accent="#34D399" style="--swatch:#34D399" title="Glacier Mint (#34D399)"></button>
+                  <button class="peakclient-swatch" type="button" data-accent="#A78BFA" style="--swatch:#A78BFA" title="Aurora Violet (#A78BFA)"></button>
+                  <button class="peakclient-swatch" type="button" data-accent="#FB7185" style="--swatch:#FB7185" title="Alpine Rose (#FB7185)"></button>
+                  <button class="peakclient-swatch" type="button" data-accent="#FBBF24" style="--swatch:#FBBF24" title="Summit Gold (#FBBF24)"></button>
+                  <button class="peakclient-swatch" type="button" data-accent="#60A5FA" style="--swatch:#60A5FA" title="Cobalt Sky (#60A5FA)"></button>
+                </div>
+              </section>
+            </div>
+
+            <!-- PANE 5: ACCOUNTS -->
             <div id="setting-pane-accounts" class="settings-pane" role="tabpanel">
               <section class="settings-card">
                 <div class="ms-auth-banner">

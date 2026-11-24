@@ -1,0 +1,24 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "pl.peaklauncher.client.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "AbstractButtonMixin",
+    "CameraMixin",
+    "DebugScreenOverlayMixin",
+    "HudMixin",
+    "KeyboardHandlerMixin",
+    "LightmapRenderStateExtractorMixin",
+    "LoadingOverlayMixin",
+    "LogoRendererMixin",
+    "MinecraftMixin",
+    "MouseHandlerMixin",
+    "PauseScreenMixin",
+    "SplashRendererMixin",
+    "TitleScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
