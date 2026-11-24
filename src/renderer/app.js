@@ -1088,7 +1088,7 @@
     const navAccCount = $('nav-accounts-count');
     if (navAccCount) navAccCount.textContent = String((state.appState.accounts || []).length);
 
-    if ($('diag-version')) $('diag-version').textContent = 'v1.7.1';
+    if ($('diag-version')) $('diag-version').textContent = 'v1.7.2';
     if ($('diag-ram')) $('diag-ram').textContent = `${(mem.totalMb / 1024).toFixed(1)} GB`;
     if ($('diag-profiles')) $('diag-profiles').textContent = String((state.appState.profiles || []).length);
     if ($('diag-javas')) $('diag-javas').textContent = String((state.javaData?.list || []).length);
@@ -3805,7 +3805,7 @@
       window.PeakFX.init('alpine-fx-canvas');
     }
     wireEvents();
-    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.7.1 started.', ts: new Date().toISOString() });
+    appendLog({ level: 'SYSTEM', text: 'Peak Launcher v1.7.2 started.', ts: new Date().toISOString() });
 
     state.appState = await api.getState();
     applyTheme(state.appState.theme);

@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 
 public class PeakClientMod implements ClientModInitializer {
   public static final String MOD_ID = "peakclient";
-  public static final String VERSION = "1.7.1";
+  public static final String VERSION = "1.7.2";
   public static final Logger LOGGER = LoggerFactory.getLogger("PeakClient");
 
   @Override

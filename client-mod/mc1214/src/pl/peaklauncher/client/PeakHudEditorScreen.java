@@ -77,9 +77,12 @@ public class PeakHudEditorScreen extends class_437 {
     }
 
     String hint = pl ? "Przeciągnij dowolny element HUD myszką, aby ustawić układ" : "Drag any HUD widget to position it";
-    int hw = this.field_22793.method_1727(hint) + 18;
-    PeakRenderUtil.drawGlassCard(g, (this.field_22789 - hw) / 2, this.field_22790 - 56, hw, 18, 0.85F, PeakRenderUtil.withAlpha(accent, 0.6F));
-    g.method_25300(this.field_22793, hint, this.field_22789 / 2, this.field_22790 - 51, PeakRenderUtil.TEXT_PRIMARY);
+    int hw = this.field_22793.method_1727(hint) + 20;
+    int hx = (this.field_22789 - hw) / 2;
+    int hy = this.field_22790 - 58;
+    PeakRenderUtil.drawRoundedGradient(g, hx, hy, hw, 19, 5, 0xDF0C1628, 0xE6070E1C);
+    PeakRenderUtil.drawRoundedOutline(g, hx, hy, hw, 19, 5, PeakRenderUtil.withAlpha(accent, 0.55F));
+    g.method_25300(this.field_22793, hint, this.field_22789 / 2, hy + 6, PeakRenderUtil.TEXT_PRIMARY);
   }
 
   @Override

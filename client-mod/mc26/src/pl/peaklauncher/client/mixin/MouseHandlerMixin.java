@@ -1,5 +1,6 @@
 package pl.peaklauncher.client.mixin;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.MouseHandler;
 import net.minecraft.client.input.MouseButtonInfo;
@@ -18,9 +19,9 @@ public class MouseHandlerMixin {
     if (action != 1 || mc.gui == null || mc.gui.screen() != null) return;
 
     int btn = buttonInfo.button();
-    if (btn == 0) {
+    if (btn == InputConstants.MOUSE_BUTTON_LEFT) {
       PeakClientState.recordLeftClick();
-    } else if (btn == 1) {
+    } else if (btn == InputConstants.MOUSE_BUTTON_RIGHT) {
       PeakClientState.recordRightClick();
     }
   }

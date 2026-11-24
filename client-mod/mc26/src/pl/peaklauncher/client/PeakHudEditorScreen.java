@@ -78,15 +78,18 @@ public class PeakHudEditorScreen extends Screen {
     }
 
     String hint = pl ? "Przeciągnij dowolny element HUD myszką, aby ustawić układ" : "Drag any HUD widget to position it";
-    int hw = this.font.width(hint) + 18;
-    PeakRenderUtil.drawGlassCard(g, (this.width - hw) / 2, this.height - 56, hw, 18, 0.85F, PeakRenderUtil.withAlpha(accent, 0.6F));
-    g.centeredText(this.font, hint, this.width / 2, this.height - 51, PeakRenderUtil.TEXT_PRIMARY);
+    int hw = this.font.width(hint) + 20;
+    int hx = (this.width - hw) / 2;
+    int hy = this.height - 58;
+    PeakRenderUtil.drawRoundedGradient(g, hx, hy, hw, 19, 5, 0xDF0C1628, 0xE6070E1C);
+    PeakRenderUtil.drawRoundedOutline(g, hx, hy, hw, 19, 5, PeakRenderUtil.withAlpha(accent, 0.55F));
+    g.centeredText(this.font, hint, this.width / 2, hy + 6, PeakRenderUtil.TEXT_PRIMARY);
   }
 
   @Override
   public boolean mouseClicked(MouseButtonEvent event, boolean doubled) {
     if (super.mouseClicked(event, doubled)) return true;
-    if (event.button() == 0) {
+    if (event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
       PeakClientConfig cfg = PeakClientConfig.get();
       for (int i = PeakHudRenderer.MODULE_IDS.length - 1; i >= 0; i--) {
         String id = PeakHudRenderer.MODULE_IDS[i];
@@ -104,7 +107,7 @@ public class PeakHudEditorScreen extends Screen {
 
   @Override
   public boolean mouseDragged(MouseButtonEvent event, double dx, double dy) {
-    if (draggingId != null && event.button() == 0) {
+    if (draggingId != null && event.button() == InputConstants.MOUSE_BUTTON_LEFT) {
       PeakClientConfig cfg = PeakClientConfig.get();
       int nx = ((int) Math.round(event.x()) - dragOffsetX);
       int ny = ((int) Math.round(event.y()) - dragOffsetY);
