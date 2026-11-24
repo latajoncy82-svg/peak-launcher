@@ -14,7 +14,7 @@
   const state = {
     releases: [],
     source: 'fallback',
-    latestTag: 'v1.6.0'
+    latestTag: 'v1.7.0'
   };
 
   const el = {
@@ -210,12 +210,12 @@
   }
 
   function formatShortVer(tag) {
-    return String(tag || 'v1.6.0').replace(/^v/i, '').split('.').slice(0, 2).join('.') || '1.6';
+    return String(tag || 'v1.7.0').replace(/^v/i, '').split('.').slice(0, 2).join('.') || '1.7';
   }
 
   function populateHeroDownload(latest) {
     if (!latest) return;
-    const tag = latest.tag || 'v1.6.0';
+    const tag = latest.tag || 'v1.7.0';
     state.latestTag = tag;
     const installer = latest.assets && latest.assets.installer;
     const portable = latest.assets && latest.assets.portable;
@@ -270,7 +270,7 @@
 
       const tagSpan = document.createElement('span');
       tagSpan.className = 'release-tag';
-      tagSpan.textContent = rel.tag || 'v1.6.0';
+      tagSpan.textContent = rel.tag || 'v1.7.0';
       titleGroup.appendChild(tagSpan);
 
       const nameSpan = document.createElement('span');
