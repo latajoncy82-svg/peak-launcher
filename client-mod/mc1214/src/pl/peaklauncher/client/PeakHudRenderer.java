@@ -58,38 +58,62 @@ public final class PeakHudRenderer {
     }
   }
 
+  private static int[] getBaseSize(String id) {
+    return switch (id) {
+      case "fps" -> new int[]{108, 16};
+      case "coords" -> new int[]{144, 38};
+      case "cps" -> new int[]{76, 16};
+      case "sprint" -> new int[]{98, 16};
+      case "ping" -> new int[]{126, 16};
+      case "clock" -> new int[]{92, 16};
+      case "keystrokes" -> new int[]{88, 84};
+      case "armor" -> new int[]{72, 86};
+      case "effects" -> new int[]{118, 52};
+      default -> new int[]{96, 16};
+    };
+  }
+
   public static Box getModuleBox(PeakClientConfig cfg, String id, int screenW, int screenH) {
-    int w;
-    int h;
+    float scale = cfg.hudScale;
+    int[] base = getBaseSize(id);
+    int w = Math.max(24, Math.round(base[0] * scale));
+    int h = Math.max(10, Math.round(base[1] * scale));
     int rawX;
     int rawY;
     switch (id) {
-      case "fps" -> { w = 112; h = 20; rawX = cfg.fpsX; rawY = cfg.fpsY; }
-      case "coords" -> { w = 148; h = 54; rawX = cfg.coordsX; rawY = cfg.coordsY; }
-      case "cps" -> { w = 112; h = 20; rawX = cfg.cpsX; rawY = cfg.cpsY; }
-      case "sprint" -> { w = 128; h = 20; rawX = cfg.sprintX; rawY = cfg.sprintY; }
-      case "ping" -> { w = 144; h = 20; rawX = cfg.pingX; rawY = cfg.pingY; }
-      case "clock" -> { w = 144; h = 20; rawX = cfg.clockX; rawY = cfg.clockY; }
+      case "fps" -> { rawX = cfg.fpsX; rawY = cfg.fpsY; }
+      case "coords" -> { rawX = cfg.coordsX; rawY = cfg.coordsY; }
+      case "cps" -> { rawX = cfg.cpsX; rawY = cfg.cpsY; }
+      case "sprint" -> { rawX = cfg.sprintX; rawY = cfg.sprintY; }
+      case "ping" -> { rawX = cfg.pingX; rawY = cfg.pingY; }
+      case "clock" -> { rawX = cfg.clockX; rawY = cfg.clockY; }
       case "keystrokes" -> {
-        w = 88; h = 84;
-        rawX = cfg.keystrokesX < 0 ? Math.max(8, screenW - w - 10) : cfg.keystrokesX;
+        rawX = cfg.keystrokesX < 0 ? Math.max(6, screenW - w - 6) : cfg.keystrokesX;
         rawY = cfg.keystrokesY;
       }
       case "armor" -> {
-        w = 88; h = 92;
-        rawX = cfg.armorX < 0 ? Math.max(8, screenW - w - 10) : cfg.armorX;
+        rawX = cfg.armorX < 0 ? Math.max(6, screenW - w - 6) : cfg.armorX;
         rawY = cfg.armorY;
       }
       case "effects" -> {
-        w = 132; h = 56;
-        rawX = cfg.effectsX < 0 ? Math.max(8, screenW - w - 10) : cfg.effectsX;
+        rawX = cfg.effectsX < 0 ? Math.max(6, screenW - w - 6) : cfg.effectsX;
         rawY = cfg.effectsY;
       }
-      default -> { w = 100; h = 20; rawX = 10; rawY = 10; }
+      default -> { rawX = 6; rawY = 6; }
     }
     int cx = Math.max(4, Math.min(Math.max(4, screenW - w - 4), rawX));
     int cy = Math.max(4, Math.min(Math.max(4, screenH - h - 4), rawY));
     return new Box(id, cx, cy, w, h);
+  }
+
+  private static void beginScaled(class_332 g, int x, int y, float scale) {
+    g.method_51448().method_22903();
+    g.method_51448().method_46416(x, y, 0.0F);
+    g.method_51448().method_22905(scale, scale, 1.0F);
+  }
+
+  private static void endScaled(class_332 g) {
+    g.method_51448().method_22909();
   }
 
   public static void renderInGameHud(class_332 g, boolean editorMode) {
@@ -103,6 +127,7 @@ public final class PeakHudRenderer {
     class_327 font = mc.field_1772;
     int accentRgb = cfg.getAccentRgb();
     boolean pl = cfg.isPolish();
+    float scale = cfg.hudScale;
 
     if (!editorMode && mc.method_53526() != null && mc.method_53526().method_53536()) {
       renderWatermarkAndToast(g, font, cfg, sw, sh, accentRgb);
@@ -111,21 +136,33 @@ public final class PeakHudRenderer {
 
     if (cfg.hudFps || editorMode) {
       Box b = getModuleBox(cfg, "fps", sw, sh);
-      PeakRenderUtil.drawGlassPanel(g, b.x(), b.y(), b.w(), b.h(), accentRgb, cfg.hudOpacity);
+      int[] base = getBaseSize("fps");
+      beginScaled(g, b.x(), b.y(), scale);
+      PeakRenderUtil.drawGlassPanel(g, 0, 0, base[0], base[1], accentRgb, cfg.hudOpacity);
       int fps = mc.method_47599();
       int minFps = PeakClientState.getMinFps();
       String label = minFps > 0 ? String.format("FPS %d (%d min)", fps, minFps) : String.format("FPS %d", fps);
+      if (font.method_1727(label) > base[0] - 10) {
+        label = font.method_27523(label, base[0] - 11);
+      }
       int col = fps >= 60 ? PeakRenderUtil.TEXT_PRIMARY : fps >= 30 ? PeakRenderUtil.AMBER : PeakRenderUtil.ROSE;
-      g.method_25303(font, label, b.x() + 7, b.y() + 6, col);
+      g.method_25303(font, label, 6, 4, col);
+      endScaled(g);
     }
 
     if (cfg.hudCoords || editorMode) {
       Box b = getModuleBox(cfg, "coords", sw, sh);
-      PeakRenderUtil.drawGlassPanel(g, b.x(), b.y(), b.w(), b.h(), accentRgb, cfg.hudOpacity);
+      int[] base = getBaseSize("coords");
+      int bw = base[0];
+      beginScaled(g, b.x(), b.y(), scale);
+      PeakRenderUtil.drawGlassPanel(g, 0, 0, bw, base[1], accentRgb, cfg.hudOpacity);
       if (mc.field_1724 != null && mc.field_1687 != null) {
         class_2338 pos = mc.field_1724.method_24515();
         String xyz = String.format("XYZ %d %d %d", pos.method_10263(), pos.method_10264(), pos.method_10260());
         String dir = getCompassShort(mc.field_1724.method_36454());
+        if (6 + font.method_1727(xyz) + 4 + font.method_1727(dir) + 5 > bw) {
+          dir = dir.split(" ")[0];
+        }
         String altCoords;
         if (mc.field_1687.method_27983() == class_1937.field_25180) {
           altCoords = String.format("OW %d / %d", pos.method_10263() * 8, pos.method_10260() * 8);
@@ -135,28 +172,35 @@ public final class PeakHudRenderer {
         String biome = mc.field_1687.method_23753(pos).method_40230()
           .map(k -> formatBiomeName(k.method_29177().method_12832()))
           .orElse("Plains");
-        if (biome.length() > 19) biome = biome.substring(0, 18) + ".";
-        g.method_25303(font, xyz, b.x() + 7, b.y() + 6, PeakRenderUtil.TEXT_PRIMARY);
-        g.method_25303(font, dir, b.x() + b.w() - font.method_1727(dir) - 6, b.y() + 6, PeakRenderUtil.withAlpha(accentRgb, 1.0F));
-        g.method_25303(font, altCoords, b.x() + 7, b.y() + 20, PeakRenderUtil.TEXT_MUTED);
-        g.method_25303(font, biome, b.x() + 7, b.y() + 34, PeakRenderUtil.EMERALD);
+        if (biome.length() > 20) biome = biome.substring(0, 19) + ".";
+        g.method_25303(font, xyz, 6, 4, PeakRenderUtil.TEXT_PRIMARY);
+        g.method_25303(font, dir, bw - font.method_1727(dir) - 5, 4, PeakRenderUtil.withAlpha(accentRgb, 1.0F));
+        g.method_25303(font, altCoords, 6, 15, PeakRenderUtil.TEXT_MUTED);
+        g.method_25303(font, biome, 6, 26, PeakRenderUtil.EMERALD);
       } else {
-        g.method_25303(font, "XYZ 128 74 -412", b.x() + 7, b.y() + 6, PeakRenderUtil.TEXT_PRIMARY);
-        g.method_25303(font, "Nether 16 / -52", b.x() + 7, b.y() + 20, PeakRenderUtil.TEXT_MUTED);
-        g.method_25303(font, "Snowy Peaks", b.x() + 7, b.y() + 34, PeakRenderUtil.EMERALD);
+        g.method_25303(font, "XYZ 128 74 -412", 6, 4, PeakRenderUtil.TEXT_PRIMARY);
+        g.method_25303(font, "N (-Z)", bw - font.method_1727("N (-Z)") - 5, 4, PeakRenderUtil.withAlpha(accentRgb, 1.0F));
+        g.method_25303(font, "Nether 16 / -52", 6, 15, PeakRenderUtil.TEXT_MUTED);
+        g.method_25303(font, "Snowy Peaks", 6, 26, PeakRenderUtil.EMERALD);
       }
+      endScaled(g);
     }
 
     if (cfg.hudCps || editorMode) {
       Box b = getModuleBox(cfg, "cps", sw, sh);
-      PeakRenderUtil.drawGlassPanel(g, b.x(), b.y(), b.w(), b.h(), accentRgb, cfg.hudOpacity);
-      String cps = String.format("CPS  %d | %d", PeakClientState.getLeftCps(), PeakClientState.getRightCps());
-      g.method_25303(font, cps, b.x() + 7, b.y() + 6, PeakRenderUtil.TEXT_PRIMARY);
+      int[] base = getBaseSize("cps");
+      beginScaled(g, b.x(), b.y(), scale);
+      PeakRenderUtil.drawGlassPanel(g, 0, 0, base[0], base[1], accentRgb, cfg.hudOpacity);
+      String cps = String.format("CPS %d | %d", PeakClientState.getLeftCps(), PeakClientState.getRightCps());
+      g.method_25303(font, cps, 6, 4, PeakRenderUtil.TEXT_PRIMARY);
+      endScaled(g);
     }
 
     if (cfg.hudSprint || editorMode) {
       Box b = getModuleBox(cfg, "sprint", sw, sh);
-      PeakRenderUtil.drawGlassPanel(g, b.x(), b.y(), b.w(), b.h(), accentRgb, cfg.hudOpacity);
+      int[] base = getBaseSize("sprint");
+      beginScaled(g, b.x(), b.y(), scale);
+      PeakRenderUtil.drawGlassPanel(g, 0, 0, base[0], base[1], accentRgb, cfg.hudOpacity);
       boolean sprinting = mc.field_1724 != null && mc.field_1724.method_5624();
       boolean toggled = cfg.toggleSprintEnabled && PeakClientState.isToggleSprintLatched();
       String text;
@@ -171,39 +215,57 @@ public final class PeakHudRenderer {
         text = pl ? "[Chód / Sprint]" : "[Walking]";
         col = PeakRenderUtil.TEXT_MUTED;
       }
-      g.method_25303(font, text, b.x() + 7, b.y() + 6, col);
+      if (font.method_1727(text) > base[0] - 10) {
+        text = font.method_27523(text, base[0] - 11);
+      }
+      g.method_25303(font, text, 6, 4, col);
+      endScaled(g);
     }
 
     if (cfg.hudPing || editorMode) {
       Box b = getModuleBox(cfg, "ping", sw, sh);
-      PeakRenderUtil.drawGlassPanel(g, b.x(), b.y(), b.w(), b.h(), accentRgb, cfg.hudOpacity);
+      int[] base = getBaseSize("ping");
+      beginScaled(g, b.x(), b.y(), scale);
+      PeakRenderUtil.drawGlassPanel(g, 0, 0, base[0], base[1], accentRgb, cfg.hudOpacity);
       String info = getPingAndServerText(mc, pl);
-      if (font.method_1727(info) > b.w() - 12) {
-        info = font.method_27523(info, b.w() - 14) + ".";
+      if (font.method_1727(info) > base[0] - 11) {
+        info = font.method_27523(info, base[0] - 13) + ".";
       }
-      g.method_25303(font, info, b.x() + 7, b.y() + 6, PeakRenderUtil.TEXT_PRIMARY);
+      g.method_25303(font, info, 6, 4, PeakRenderUtil.TEXT_PRIMARY);
+      endScaled(g);
     }
 
     if (cfg.hudClock || editorMode) {
       Box b = getModuleBox(cfg, "clock", sw, sh);
-      PeakRenderUtil.drawGlassPanel(g, b.x(), b.y(), b.w(), b.h(), accentRgb, cfg.hudOpacity);
+      int[] base = getBaseSize("clock");
+      beginScaled(g, b.x(), b.y(), scale);
+      PeakRenderUtil.drawGlassPanel(g, 0, 0, base[0], base[1], accentRgb, cfg.hudOpacity);
       String timeStr = LocalTime.now().format(TIME_FMT) + " · " + PeakClientState.formatSessionDuration();
-      g.method_25303(font, timeStr, b.x() + 7, b.y() + 6, PeakRenderUtil.TEXT_MUTED);
+      g.method_25303(font, timeStr, 6, 4, PeakRenderUtil.TEXT_MUTED);
+      endScaled(g);
     }
 
     if (cfg.hudKeystrokes || editorMode) {
       Box b = getModuleBox(cfg, "keystrokes", sw, sh);
-      renderKeystrokes(g, font, mc, b.x(), b.y(), cfg.hudOpacity, accentRgb);
+      beginScaled(g, b.x(), b.y(), scale);
+      renderKeystrokes(g, font, mc, 0, 0, cfg.hudOpacity, accentRgb);
+      endScaled(g);
     }
 
     if (cfg.hudArmor || editorMode) {
       Box b = getModuleBox(cfg, "armor", sw, sh);
-      renderArmorAndHand(g, font, mc, b.x(), b.y(), b.w(), b.h(), cfg.hudOpacity, accentRgb, editorMode);
+      int[] base = getBaseSize("armor");
+      beginScaled(g, b.x(), b.y(), scale);
+      renderArmorAndHand(g, font, mc, 0, 0, base[0], base[1], cfg.hudOpacity, accentRgb, editorMode);
+      endScaled(g);
     }
 
     if (cfg.hudEffects || editorMode) {
       Box b = getModuleBox(cfg, "effects", sw, sh);
-      renderEffects(g, font, mc, b.x(), b.y(), b.w(), cfg.hudOpacity, accentRgb, pl, editorMode);
+      int[] base = getBaseSize("effects");
+      beginScaled(g, b.x(), b.y(), scale);
+      renderEffects(g, font, mc, 0, 0, base[0], cfg.hudOpacity, accentRgb, pl, editorMode);
+      endScaled(g);
     }
 
     renderWatermarkAndToast(g, font, cfg, sw, sh, accentRgb);
@@ -251,16 +313,16 @@ public final class PeakHudRenderer {
     }
     if (items.isEmpty() && !editorMode) return;
 
-    int boxH = editorMode && items.isEmpty() ? h : Math.max(22, items.size() * 18 + 6);
+    int boxH = editorMode && items.isEmpty() ? h : Math.max(20, items.size() * 17 + 4);
     PeakRenderUtil.drawGlassPanel(g, x, y, w, boxH, accentRgb, opacity);
     if (items.isEmpty()) {
       g.method_25300(font, "Armor HUD", x + w / 2, y + boxH / 2 - 4, PeakRenderUtil.TEXT_MUTED);
       return;
     }
 
-    int rowY = y + 3;
+    int rowY = y + 2;
     for (class_1799 st : items) {
-      g.method_51427(st, x + 5, rowY);
+      g.method_51427(st, x + 4, rowY);
       String txt;
       int txtCol = PeakRenderUtil.TEXT_PRIMARY;
       if (st.method_7963() && st.method_7936() > 0) {
@@ -271,8 +333,8 @@ public final class PeakHudRenderer {
       } else {
         txt = "x" + st.method_7947();
       }
-      g.method_25303(font, txt, x + 26, rowY + 4, txtCol);
-      rowY += 18;
+      g.method_25303(font, txt, x + 23, rowY + 4, txtCol);
+      rowY += 17;
     }
   }
 
@@ -281,25 +343,25 @@ public final class PeakHudRenderer {
     if (active.isEmpty() && !editorMode) return;
 
     int count = Math.min(4, active.size());
-    int boxH = Math.max(24, count * 14 + 8);
+    int boxH = Math.max(20, count * 12 + 6);
     PeakRenderUtil.drawGlassPanel(g, x, y, w, boxH, 0x34D399, opacity);
     if (active.isEmpty()) {
       g.method_25300(font, pl ? "Efekty mikstur" : "Effects HUD", x + w / 2, y + boxH / 2 - 4, PeakRenderUtil.TEXT_MUTED);
       return;
     }
 
-    int ry = y + 5;
+    int ry = y + 4;
     int shown = 0;
     for (class_1293 eff : active) {
       if (shown >= 4) break;
       String name = eff.method_5579().comp_349().method_5560().getString();
-      if (name.length() > 12) name = name.substring(0, 11) + ".";
+      if (name.length() > 11) name = name.substring(0, 10) + ".";
       String dur = eff.method_48559() ? "inf" : formatDurationTicks(eff.method_5584());
       int lvl = eff.method_5578() + 1;
       String left = lvl > 1 ? name + " " + lvl : name;
       g.method_25303(font, left, x + 6, ry, PeakRenderUtil.TEXT_PRIMARY);
       g.method_25303(font, dur, x + w - font.method_1727(dur) - 6, ry, PeakRenderUtil.withAlpha(accentRgb, 1.0F));
-      ry += 14;
+      ry += 12;
       shown++;
     }
   }
@@ -313,11 +375,16 @@ public final class PeakHudRenderer {
       if (cfg.fullbrightEnabled) {
         wm += " · FB";
       }
+      float wmScale = Math.min(0.80F, Math.max(0.65F, cfg.hudScale));
       int w = font.method_1727(wm) + 12;
-      int x = sw - w - 8;
-      int y = sh - 18;
-      PeakRenderUtil.drawGlassCard(g, x, y, w, 14, 0.50F, PeakRenderUtil.withAlpha(accentRgb, 0.45F));
-      g.method_25303(font, wm, x + 6, y + 3, PeakRenderUtil.withAlpha(accentRgb, 1.0F));
+      int swW = Math.round(w * wmScale);
+      int swH = Math.round(14 * wmScale);
+      int x = sw - swW - 6;
+      int y = sh - swH - 4;
+      beginScaled(g, x, y, wmScale);
+      PeakRenderUtil.drawGlassCard(g, 0, 0, w, 14, 0.50F, PeakRenderUtil.withAlpha(accentRgb, 0.45F));
+      g.method_25303(font, wm, 6, 3, PeakRenderUtil.withAlpha(accentRgb, 1.0F));
+      endScaled(g);
     }
 
     String toast = PeakClientState.getActiveToast();

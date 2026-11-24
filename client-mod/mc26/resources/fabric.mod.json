@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "peakclient",
-  "version": "1.7.0",
+  "version": "1.7.1",
   "name": "Peak Client",
   "description": "Peak Launcher in-game Alpine UI, Better F3, Peak HUD addons, Zoom, Fullbright and Peak Client GUI.",
   "authors": ["Peak Launcher"],

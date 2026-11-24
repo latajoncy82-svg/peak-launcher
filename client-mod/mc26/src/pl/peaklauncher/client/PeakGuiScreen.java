@@ -229,7 +229,24 @@ public class PeakGuiScreen extends Screen {
         swX += 35;
       }
 
-      int opY = swY + 30;
+      int scY = swY + 26;
+      g.text(font, (pl ? "Skala HUD: " : "HUD Scale: ") + Math.round(cfg.hudScale * 100.0F) + "%", cx, scY, PeakRenderUtil.TEXT_PRIMARY, true);
+      float[] scales = {0.60F, 0.72F, 0.85F, 1.00F};
+      String[] scaleNames = {"60%", "72%", "85%", "100%"};
+      int sx = cx;
+      for (int i = 0; i < scales.length; i++) {
+        final float val = scales[i];
+        boolean act = Math.abs(cfg.hudScale - val) < 0.05F;
+        drawMiniActionButton(g, font, sx, scY + 12, 52, 17, scaleNames[i], accent, act, mouseX, mouseY, () -> {
+          boolean autoStack = cfg.isUsingDefaultLayout();
+          cfg.hudScale = val;
+          if (autoStack) cfg.applyDefaultStackForScale();
+          PeakClientConfig.save();
+        });
+        sx += 58;
+      }
+
+      int opY = scY + 36;
       g.text(font, (pl ? "Przezroczystość paneli HUD: " : "HUD Panel Opacity: ") + Math.round(cfg.hudOpacity * 100.0F) + "%", cx, opY, PeakRenderUtil.TEXT_PRIMARY, true);
       float[] opacities = {0.35F, 0.55F, 0.72F, 0.88F};
       String[] opNames = {"35%", "55%", "72%", "88%"};
@@ -237,28 +254,28 @@ public class PeakGuiScreen extends Screen {
       for (int i = 0; i < opacities.length; i++) {
         final float val = opacities[i];
         boolean act = Math.abs(cfg.hudOpacity - val) < 0.08F;
-        drawMiniActionButton(g, font, ox, opY + 13, 52, 18, opNames[i], accent, act, mouseX, mouseY, () -> {
+        drawMiniActionButton(g, font, ox, opY + 12, 52, 17, opNames[i], accent, act, mouseX, mouseY, () -> {
           cfg.hudOpacity = val;
           PeakClientConfig.save();
         });
         ox += 58;
       }
 
-      int actY = opY + 40;
+      int actY = opY + 36;
       int btnW = (cw - 8) / 2;
-      drawMiniActionButton(g, font, cx, actY, btnW, 22,
+      drawMiniActionButton(g, font, cx, actY, btnW, 20,
         pl ? "Edytor Układu HUD" : "HUD Layout Editor", accent, true, mouseX, mouseY, () -> {
           if (minecraft != null && minecraft.gui != null) {
             minecraft.gui.setScreen(new PeakHudEditorScreen(this));
           }
         });
-      drawMiniActionButton(g, font, cx + btnW + 8, actY, btnW, 22,
+      drawMiniActionButton(g, font, cx + btnW + 8, actY, btnW, 20,
         pl ? "Resetuj pozycje" : "Reset Positions", 0xFBBF24, false, mouseX, mouseY, () -> {
           cfg.resetPositions();
           PeakClientState.showToast(pl ? "Zresetowano pozycje HUD" : "HUD positions reset");
         });
 
-      drawMiniActionButton(g, font, cx, actY + 28, cw, 20,
+      drawMiniActionButton(g, font, cx, actY + 25, cw, 19,
         pl ? "Przywróć domyślne ustawienia Peak Client" : "Restore Peak Client defaults", 0xFB7185, false, mouseX, mouseY, () -> {
           cfg.resetAllDefaults();
           PeakClientState.showToast(pl ? "Przywrócono domyślne ustawienia" : "Restored default settings");

@@ -11,13 +11,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 public class PeakClientConfig {
+  public static final int CURRENT_CONFIG_VERSION = 2;
   private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
   private static PeakClientConfig INSTANCE;
 
+  public int configVersion = 0;
   public String language = "pl";
   public String accentColor = "#38BDF8";
   public float hudOpacity = 0.72F;
-  public float hudScale = 1.0F;
+  public float hudScale = 0.72F;
   public boolean showWatermark = true;
 
   public boolean peakMainMenu = true;
@@ -47,24 +49,24 @@ public class PeakClientConfig {
   public boolean zoomEnabled = true;
   public boolean fullbrightEnabled = false;
 
-  public int fpsX = 10;
-  public int fpsY = 10;
-  public int coordsX = 10;
-  public int coordsY = 34;
-  public int cpsX = 10;
-  public int cpsY = 92;
-  public int sprintX = 10;
-  public int sprintY = 116;
-  public int pingX = 10;
-  public int pingY = 140;
-  public int clockX = 10;
-  public int clockY = 164;
+  public int fpsX = 6;
+  public int fpsY = 6;
+  public int coordsX = 6;
+  public int coordsY = 21;
+  public int cpsX = 6;
+  public int cpsY = 51;
+  public int sprintX = 6;
+  public int sprintY = 66;
+  public int pingX = 6;
+  public int pingY = 81;
+  public int clockX = 6;
+  public int clockY = 96;
   public int keystrokesX = -1;
-  public int keystrokesY = 10;
+  public int keystrokesY = 6;
   public int armorX = -1;
-  public int armorY = 112;
+  public int armorY = 72;
   public int effectsX = -1;
-  public int effectsY = 200;
+  public int effectsY = 140;
 
   public static PeakClientConfig get() {
     if (INSTANCE == null) {
@@ -85,8 +87,28 @@ public class PeakClientConfig {
       try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
         PeakClientConfig loaded = GSON.fromJson(reader, PeakClientConfig.class);
         if (loaded != null) {
+          boolean needsSave = false;
+          if (loaded.configVersion < CURRENT_CONFIG_VERSION) {
+            boolean wasLegacyV170Layout = loaded.fpsX == 10 && loaded.fpsY == 10
+              && loaded.coordsX == 10 && loaded.coordsY == 34
+              && loaded.cpsX == 10 && loaded.cpsY == 92
+              && loaded.sprintX == 10 && loaded.sprintY == 116
+              && loaded.pingX == 10 && loaded.pingY == 140
+              && loaded.clockX == 10 && loaded.clockY == 164;
+            if (Math.abs(loaded.hudScale - 1.0F) < 0.01F) {
+              loaded.hudScale = 0.72F;
+            }
+            if (wasLegacyV170Layout) {
+              loaded.applyDefaultStackForScale();
+            }
+            loaded.configVersion = CURRENT_CONFIG_VERSION;
+            needsSave = true;
+          }
           loaded.sanitize();
           INSTANCE = loaded;
+          if (needsSave) {
+            save();
+          }
           return;
         }
       } catch (Exception e) {
@@ -94,6 +116,7 @@ public class PeakClientConfig {
       }
     }
     INSTANCE = new PeakClientConfig();
+    INSTANCE.configVersion = CURRENT_CONFIG_VERSION;
     save();
   }
 
@@ -121,30 +144,39 @@ public class PeakClientConfig {
     if (Float.isNaN(hudOpacity) || hudOpacity < 0.15F || hudOpacity > 0.98F) {
       hudOpacity = 0.72F;
     }
-    if (Float.isNaN(hudScale) || hudScale < 0.7F || hudScale > 1.5F) {
-      hudScale = 1.0F;
+    if (Float.isNaN(hudScale) || hudScale < 0.50F || hudScale > 1.25F) {
+      hudScale = 0.72F;
     }
   }
 
+  public void applyDefaultStackForScale() {
+    int stepSingle = Math.max(10, Math.round(16.0F * hudScale)) + 3;
+    int stepCoords = Math.max(22, Math.round(38.0F * hudScale)) + 3;
+    int y = 6;
+    fpsX = 6; fpsY = y; y += stepSingle;
+    coordsX = 6; coordsY = y; y += stepCoords;
+    cpsX = 6; cpsY = y; y += stepSingle;
+    sprintX = 6; sprintY = y; y += stepSingle;
+    pingX = 6; pingY = y; y += stepSingle;
+    clockX = 6; clockY = y;
+
+    int ry = 6;
+    keystrokesX = -1; keystrokesY = ry; ry += Math.max(40, Math.round(84.0F * hudScale)) + 5;
+    armorX = -1; armorY = ry; ry += Math.max(40, Math.round(86.0F * hudScale)) + 5;
+    effectsX = -1; effectsY = ry;
+  }
+
+  public boolean isUsingDefaultLayout() {
+    int expectedStepSingle = Math.max(10, Math.round(16.0F * hudScale)) + 3;
+    int expectedCoordsY = 6 + expectedStepSingle;
+    return (fpsX == 6 && coordsX == 6 && cpsX == 6 && sprintX == 6 && pingX == 6 && clockX == 6)
+      && Math.abs(fpsY - 6) <= 2
+      && Math.abs(coordsY - expectedCoordsY) <= 2
+      && keystrokesX < 0 && armorX < 0 && effectsX < 0;
+  }
+
   public void resetPositions() {
-    fpsX = 10;
-    fpsY = 10;
-    coordsX = 10;
-    coordsY = 34;
-    cpsX = 10;
-    cpsY = 92;
-    sprintX = 10;
-    sprintY = 116;
-    pingX = 10;
-    pingY = 140;
-    clockX = 10;
-    clockY = 164;
-    keystrokesX = -1;
-    keystrokesY = 10;
-    armorX = -1;
-    armorY = 112;
-    effectsX = -1;
-    effectsY = 200;
+    applyDefaultStackForScale();
     save();
   }
 
@@ -152,6 +184,7 @@ public class PeakClientConfig {
     String keepLang = this.language;
     PeakClientConfig fresh = new PeakClientConfig();
     fresh.language = keepLang;
+    fresh.configVersion = CURRENT_CONFIG_VERSION;
     INSTANCE = fresh;
     save();
   }

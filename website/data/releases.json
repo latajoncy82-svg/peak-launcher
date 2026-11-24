@@ -1,5 +1,27 @@
 [
   {
+    "tag": "v1.7.1",
+    "name": "Peak Launcher 1.7.1 — Kompaktowy HUD w grze i regulacja skali Peak Client",
+    "publishedAt": "2026-11-24T18:50:00Z",
+    "body": "### Najważniejsze nowości w wersji 1.7.1\n- **Kompaktowy rozmiar paneli Peak HUD (domyślnie `72%` skali)**: Mniejsze, zgrabniejsze karty FPS, Koordynatów, CPS, Sprintu, Pingu, Zegara, Zbroi, Efektów i Keystrokes bez zbędnych pustych marginesów.\n- **Nowa opcja `Skala HUD` w Peak GUI (`Right Shift` -> `Układ i Kolor`)**: Przełączanie skali nakładki (`60%`, `72%`, `85%`, `100%`) z automatycznym dopasowaniem odstępów.\n- **Automatyczna migracja z v1.7.0**: Istniejąca konfiguracja `config/peak-client.json` automatycznie przechodzi na kompaktowy rozmiar przy kolejnym uruchomieniu gry.",
+    "htmlUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/tag/v1.7.1",
+    "prerelease": false,
+    "assets": {
+      "installer": {
+        "name": "Peak-Launcher-Setup-1.7.1.exe",
+        "size": 124699136,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.7.1/Peak-Launcher-Setup-1.7.1.exe",
+        "downloadCount": 0
+      },
+      "portable": {
+        "name": "Peak-Launcher-Portable-1.7.1.exe",
+        "size": 113347950,
+        "downloadUrl": "https://github.com/latajoncy82-svg/peak-launcher/releases/download/v1.7.1/Peak-Launcher-Portable-1.7.1.exe",
+        "downloadCount": 0
+      }
+    }
+  },
+  {
     "tag": "v1.7.0",
     "name": "Peak Launcher 1.7.0 — Wygląd Peak w Minecraft, Lepsze F3 i Nowe Peak GUI",
     "publishedAt": "2026-11-24T17:00:00Z",
